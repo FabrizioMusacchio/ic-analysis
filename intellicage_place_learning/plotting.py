@@ -39,6 +39,7 @@ PHASE_COLORS = {
     3: "#3d80b8",
     4: "#1f2a78",
 }
+DEFAULT_SLEEP_SHADE_COLOR = "#e6e6e6"
 
 
 def _group_color(group_name: str) -> str:
@@ -81,13 +82,11 @@ def _add_awake_sleep_background(
     awake_end_clock_hour: float,
     label_y: float | None = None,
 ) -> None:
-    """Shade awake and sleep intervals based on a wall-clock cycle."""
+    """Shade sleep intervals based on a wall-clock cycle."""
 
     if awake_end_clock_hour <= awake_start_clock_hour:
         raise ValueError("Only same-day awake windows are supported.")
 
-    awake_color = "#dff4fb"
-    sleep_color = "#ececec"
     if label_y is None:
         y_low, y_high = ax.get_ylim()
         label_y = y_high - (y_high - y_low) * 0.07
@@ -101,21 +100,27 @@ def _add_awake_sleep_background(
         sleep2_start = awake_end
         sleep2_end = cycle_start + 24.0
 
-        for left, right, color, label in (
-            (sleep1_start, sleep1_end, sleep_color, "sleep"),
-            (awake_start, awake_end, awake_color, "awake"),
-            (sleep2_start, sleep2_end, sleep_color, "sleep"),
+        for left, right in (
+            (sleep1_start, sleep1_end),
+            (sleep2_start, sleep2_end),
         ):
             if right <= x_start or left >= x_end:
                 continue
             draw_left = max(left, x_start)
             draw_right = min(right, x_end)
-            ax.axvspan(draw_left, draw_right, color=color, alpha=0.7, linewidth=0, zorder=0)
+            ax.axvspan(
+                draw_left,
+                draw_right,
+                color=DEFAULT_SLEEP_SHADE_COLOR,
+                alpha=0.55,
+                linewidth=0,
+                zorder=0,
+            )
             if draw_right - draw_left >= 5:
                 ax.text(
                     draw_left + (draw_right - draw_left) / 2.0,
                     label_y,
-                    label,
+                    "sleep",
                     ha="center",
                     va="top",
                     fontsize=9,
@@ -219,6 +224,99 @@ def _draw_step_with_band(
     ax.step(x_step, y_step, where="post", color=color, linewidth=linewidth, label=label, zorder=4)
 
 
+def _draw_line_with_band(
+    ax: plt.Axes,
+    x_centers: pd.Series,
+    y_mean: pd.Series,
+    y_spread: pd.Series,
+    *,
+    color: str,
+    label: str | None,
+    linewidth: float = 2.8,
+) -> None:
+    """Draw a line mean trace with matching shaded spread."""
+
+    x = x_centers.to_numpy(dtype=float)
+    y = y_mean.to_numpy(dtype=float)
+    spread = y_spread.to_numpy(dtype=float)
+    ax.fill_between(x, y - spread, y + spread, color=color, alpha=0.18, linewidth=0, zorder=3)
+    ax.plot(x, y, color=color, linewidth=linewidth, label=label, zorder=4)
+
+
+def _draw_trace_with_band(
+    ax: plt.Axes,
+    summary_frame: pd.DataFrame,
+    *,
+    y_col: str,
+    spread_col: str,
+    color: str,
+    label: str | None,
+    plot_style: str = "step",
+    linewidth: float = 2.8,
+) -> None:
+    """Draw either a step or line mean trace with shaded spread."""
+
+    if plot_style == "line":
+        _draw_line_with_band(
+            ax,
+            summary_frame["bin_center_hours"],
+            summary_frame[y_col],
+            summary_frame[spread_col],
+            color=color,
+            label=label,
+            linewidth=linewidth,
+        )
+    else:
+        _draw_step_with_band(
+            ax,
+            summary_frame["bin_start_hours"],
+            summary_frame["bin_end_hours"],
+            summary_frame[y_col],
+            summary_frame[spread_col],
+            color=color,
+            label=label,
+            linewidth=linewidth,
+        )
+
+
+def _draw_individual_trace(
+    ax: plt.Axes,
+    trace_frame: pd.DataFrame,
+    *,
+    y_col: str,
+    color: str,
+    plot_style: str = "step",
+    linewidth: float = 1.0,
+    alpha: float = 0.35,
+    label: str | None = None,
+) -> None:
+    """Draw an individual mouse trace as either a step or line plot."""
+
+    if plot_style == "line":
+        ax.plot(
+            trace_frame["bin_center_hours"],
+            trace_frame[y_col],
+            color=color,
+            linewidth=linewidth,
+            alpha=alpha,
+            label=label,
+            zorder=2,
+        )
+    else:
+        x_step = np.append(trace_frame["bin_start_hours"].to_numpy(), trace_frame["bin_end_hours"].iloc[-1])
+        y_step = np.append(trace_frame[y_col].to_numpy(), trace_frame[y_col].iloc[-1])
+        ax.step(
+            x_step,
+            y_step,
+            where="post",
+            color=color,
+            linewidth=linewidth,
+            alpha=alpha,
+            label=label,
+            zorder=2,
+        )
+
+
 def _format_rate_axis(ax: plt.Axes) -> None:
     """Format a rate axis in percent."""
 
@@ -252,6 +350,7 @@ def plot_experiment_overview(
     phase_display_names: dict[int, str],
     spread_metric: str,
     x_end_hours: float | None = None,
+    plot_style: str = "step",
     show_individual_labels: bool = True,
 ) -> None:
     """Plot full-experiment visit activity for one pathology group."""
@@ -267,27 +366,25 @@ def plot_experiment_overview(
 
     fig, ax = plt.subplots(figsize=(16, 6.5))
     for et_label, mouse_data in group_mouse.groupby("ETLabel", observed=True):
-        x_step = np.append(mouse_data["bin_start_hours"].to_numpy(), mouse_data["bin_end_hours"].iloc[-1])
-        y_step = np.append(mouse_data["value"].to_numpy(), mouse_data["value"].iloc[-1])
-        ax.step(
-            x_step,
-            y_step,
-            where="post",
+        _draw_individual_trace(
+            ax,
+            mouse_data,
+            y_col="value",
+            color="#666666",
+            plot_style=plot_style,
             linewidth=1.0,
             alpha=0.35,
-            color="#666666",
             label=str(et_label) if show_individual_labels else None,
-            zorder=2,
         )
 
-    _draw_step_with_band(
+    _draw_trace_with_band(
         ax,
-        group_summary["bin_start_hours"],
-        group_summary["bin_end_hours"],
-        group_summary["mean_value"],
-        group_summary[spread_col],
+        group_summary,
+        y_col="mean_value",
+        spread_col=spread_col,
         color=color,
         label=f"Group mean ± {spread_metric.upper()}",
+        plot_style=plot_style,
     )
 
     max_hour = float(group_summary["bin_end_hours"].max()) if x_end_hours is None else float(x_end_hours)
@@ -313,6 +410,62 @@ def plot_experiment_overview(
         for text in legend.get_texts():
             if text.get_text().startswith("ET") or text.get_text().startswith("Lo"):
                 text.set_visible(False)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=300)
+    plt.close(fig)
+
+
+def plot_experiment_overview_groups(
+    summary_bins: pd.DataFrame,
+    *,
+    output_path: Path,
+    phase_window_table: pd.DataFrame,
+    phase_display_names: dict[int, str],
+    spread_metric: str,
+    x_end_hours: float | None = None,
+    plot_style: str = "step",
+) -> None:
+    """Plot all pathology-group visit means across the full experiment."""
+
+    if summary_bins.empty:
+        return
+
+    _prepare_output_path(output_path)
+    spread_col = _spread_column(spread_metric)
+    fig, ax = plt.subplots(figsize=(16, 6.5))
+    max_hour = float(summary_bins["bin_end_hours"].max()) if x_end_hours is None else float(x_end_hours)
+    ax.set_xlim(0, max_hour)
+    y_max = float((summary_bins["mean_value"] + summary_bins[spread_col]).max())
+    ax.set_ylim(0, max(5.0, y_max * 1.18))
+
+    _add_awake_sleep_background(
+        ax,
+        x_end=max_hour,
+        x_start=0.0,
+        origin_clock_hour=12.0,
+        awake_start_clock_hour=8.0,
+        awake_end_clock_hour=20.0,
+    )
+    _add_day_annotations(ax, x_end=max_hour, x_start=0.0, label_every_days=2, starting_day=0)
+    _add_phase_band(ax, phase_window_table, phase_display_names=phase_display_names)
+
+    for group_name, group_summary in summary_bins.groupby("Group", observed=True):
+        _draw_trace_with_band(
+            ax,
+            group_summary,
+            y_col="mean_value",
+            spread_col=spread_col,
+            color=_group_color(str(group_name)),
+            label=str(group_name),
+            plot_style=plot_style,
+            linewidth=2.4,
+        )
+
+    ax.set_title("Visits across all phases by group")
+    ax.set_xlabel("Elapsed experimental time [hours]")
+    ax.set_ylabel("Visits per mouse and bin")
+    ax.grid(axis="y", alpha=0.25)
+    ax.legend(frameon=False, ncol=3, loc="upper right")
     fig.tight_layout()
     fig.savefig(output_path, dpi=300)
     plt.close(fig)
@@ -385,6 +538,7 @@ def plot_phase_learning_counts(
     output_path: Path,
     spread_metric: str,
     x_end_hours: float | None = None,
+    plot_style: str = "step",
 ) -> None:
     """Plot correct-visit counts for phase 3 or phase 4."""
 
@@ -399,9 +553,15 @@ def plot_phase_learning_counts(
 
     fig, ax = plt.subplots(figsize=(14, 6))
     for _, mouse_data in group_mouse.groupby("ETLabel", observed=True):
-        x_step = np.append(mouse_data["bin_start_hours"].to_numpy(), mouse_data["bin_end_hours"].iloc[-1])
-        y_step = np.append(mouse_data["value"].to_numpy(), mouse_data["value"].iloc[-1])
-        ax.step(x_step, y_step, where="post", color="#9aa0a6", linewidth=1.0, alpha=0.35, zorder=2)
+        _draw_individual_trace(
+            ax,
+            mouse_data,
+            y_col="value",
+            color="#9aa0a6",
+            plot_style=plot_style,
+            linewidth=1.0,
+            alpha=0.35,
+        )
 
     max_hour = float(group_summary["bin_end_hours"].max()) if x_end_hours is None else float(x_end_hours)
     y_max = max(5.0, float(group_summary["mean_value"].max() + group_summary[spread_col].max()) * 1.18)
@@ -416,14 +576,14 @@ def plot_phase_learning_counts(
         awake_end_clock_hour=20.0,
     )
     _add_day_annotations(ax, x_end=max_hour, x_start=0.0, label_every_days=1, starting_day=1)
-    _draw_step_with_band(
+    _draw_trace_with_band(
         ax,
-        group_summary["bin_start_hours"],
-        group_summary["bin_end_hours"],
-        group_summary["mean_value"],
-        group_summary[spread_col],
+        group_summary,
+        y_col="mean_value",
+        spread_col=spread_col,
         color=color,
         label=f"Group mean ± {spread_metric.upper()}",
+        plot_style=plot_style,
     )
 
     ax.set_title(f"{group_name}: rewarded correct visits ({phase_display_name}, {bin_hours} h bins)")
@@ -447,6 +607,7 @@ def plot_phase_learning_rate(
     output_path: Path,
     spread_metric: str,
     x_end_hours: float | None = None,
+    plot_style: str = "step",
 ) -> None:
     """Plot correct-visit rates for phase 3 or phase 4."""
 
@@ -464,9 +625,17 @@ def plot_phase_learning_rate(
         clean = mouse_data.dropna(subset=["value"])
         if clean.empty:
             continue
-        x_step = np.append(clean["bin_start_hours"].to_numpy(), clean["bin_end_hours"].iloc[-1])
-        y_step = np.append(clean["value"].to_numpy() * 100.0, clean["value"].iloc[-1] * 100.0)
-        ax.step(x_step, y_step, where="post", color="#b8bdc4", linewidth=1.0, alpha=0.35, zorder=2)
+        clean = clean.copy()
+        clean["value_pct"] = clean["value"] * 100.0
+        _draw_individual_trace(
+            ax,
+            clean,
+            y_col="value_pct",
+            color="#b8bdc4",
+            plot_style=plot_style,
+            linewidth=1.0,
+            alpha=0.35,
+        )
 
     max_hour = float(group_summary["bin_end_hours"].max()) if x_end_hours is None else float(x_end_hours)
     ax.set_xlim(0, max_hour)
@@ -480,14 +649,17 @@ def plot_phase_learning_rate(
         awake_end_clock_hour=20.0,
     )
     _add_day_annotations(ax, x_end=max_hour, x_start=0.0, label_every_days=1, starting_day=1)
-    _draw_step_with_band(
+    group_summary = group_summary.copy()
+    group_summary["mean_value_pct"] = group_summary["mean_value"] * 100.0
+    group_summary["spread_pct"] = group_summary[spread_col] * 100.0
+    _draw_trace_with_band(
         ax,
-        group_summary["bin_start_hours"],
-        group_summary["bin_end_hours"],
-        group_summary["mean_value"] * 100.0,
-        group_summary[spread_col] * 100.0,
+        group_summary,
+        y_col="mean_value_pct",
+        spread_col="spread_pct",
         color=color,
         label=f"Group mean ± {spread_metric.upper()}",
+        plot_style=plot_style,
     )
     ax.axhline(25.0, color="#4f4f4f", linestyle="--", linewidth=1.4, label="Chance level (25%)")
 
@@ -509,6 +681,7 @@ def plot_phase_learning_rate_groups(
     output_path: Path,
     spread_metric: str,
     x_end_hours: float | None = None,
+    plot_style: str = "step",
 ) -> None:
     """Plot all pathology-group rate means in one figure."""
 
@@ -533,14 +706,17 @@ def plot_phase_learning_rate_groups(
 
     for group_name, group_summary in summary_bins.groupby("Group", observed=True):
         color = _group_color(str(group_name))
-        _draw_step_with_band(
+        group_summary = group_summary.copy()
+        group_summary["mean_value_pct"] = group_summary["mean_value"] * 100.0
+        group_summary["spread_pct"] = group_summary[spread_col] * 100.0
+        _draw_trace_with_band(
             ax,
-            group_summary["bin_start_hours"],
-            group_summary["bin_end_hours"],
-            group_summary["mean_value"] * 100.0,
-            group_summary[spread_col] * 100.0,
+            group_summary,
+            y_col="mean_value_pct",
+            spread_col="spread_pct",
             color=color,
             label=str(group_name),
+            plot_style=plot_style,
             linewidth=2.4,
         )
 
@@ -549,6 +725,138 @@ def plot_phase_learning_rate_groups(
     ax.set_xlabel(f"Hours since start of {phase_display_name}")
     ax.grid(axis="y", alpha=0.25)
     ax.legend(frameon=False, ncol=3, loc="upper right")
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=300)
+    plt.close(fig)
+
+
+def plot_phase_learning_counts_groups(
+    summary_bins: pd.DataFrame,
+    *,
+    phase_display_name: str,
+    bin_hours: int,
+    output_path: Path,
+    spread_metric: str,
+    x_end_hours: float | None = None,
+    plot_style: str = "step",
+    title_prefix: str = "Rewarded correct visit counts across groups",
+    ylabel: str = "Rewarded correct visits per mouse and bin",
+) -> None:
+    """Plot all pathology-group correct-visit counts in one figure."""
+
+    if summary_bins.empty:
+        return
+
+    _prepare_output_path(output_path)
+    spread_col = _spread_column(spread_metric)
+    fig, ax = plt.subplots(figsize=(15, 6.5))
+    max_hour = float(summary_bins["bin_end_hours"].max()) if x_end_hours is None else float(x_end_hours)
+    ax.set_xlim(0, max_hour)
+    y_max = float((summary_bins["mean_value"] + summary_bins[spread_col]).max())
+    ax.set_ylim(0, max(5.0, y_max * 1.18))
+    _add_awake_sleep_background(
+        ax,
+        x_end=max_hour,
+        x_start=0.0,
+        origin_clock_hour=8.0,
+        awake_start_clock_hour=8.0,
+        awake_end_clock_hour=20.0,
+    )
+    _add_day_annotations(ax, x_end=max_hour, x_start=0.0, label_every_days=1, starting_day=1)
+
+    for group_name, group_summary in summary_bins.groupby("Group", observed=True):
+        _draw_trace_with_band(
+            ax,
+            group_summary,
+            y_col="mean_value",
+            spread_col=spread_col,
+            color=_group_color(str(group_name)),
+            label=str(group_name),
+            plot_style=plot_style,
+            linewidth=2.4,
+        )
+
+    ax.set_title(f"{title_prefix} ({phase_display_name}, {bin_hours} h bins)")
+    ax.set_xlabel(f"Hours since start of {phase_display_name}")
+    ax.set_ylabel(ylabel)
+    ax.grid(axis="y", alpha=0.25)
+    ax.legend(frameon=False, ncol=3, loc="upper right")
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=300)
+    plt.close(fig)
+
+
+def plot_experiment_dual_metric_bars(
+    primary_summary: pd.DataFrame,
+    secondary_summary: pd.DataFrame,
+    *,
+    group_name: str,
+    bin_hours: int,
+    output_path: Path,
+    secondary_label: str,
+    phase_window_table: pd.DataFrame,
+    phase_display_names: dict[int, str],
+) -> None:
+    """Plot paired bar summaries across the full experiment timeline."""
+
+    visits_group = primary_summary.loc[primary_summary["Group"].astype(str).eq(group_name)].copy()
+    secondary_group = secondary_summary.loc[secondary_summary["Group"].astype(str).eq(group_name)].copy()
+    if visits_group.empty or secondary_group.empty:
+        return
+
+    _prepare_output_path(output_path)
+    color = _group_color(group_name)
+    fig, ax = plt.subplots(figsize=(16, 6.5))
+    max_hour = float(visits_group["bin_end_hours"].max())
+    ax.set_xlim(0, max_hour)
+    y_max = max(
+        float((visits_group["mean_value"] + visits_group["sem_value"]).max()),
+        float((secondary_group["mean_value"] + secondary_group["sem_value"]).max()),
+    )
+    ax.set_ylim(0, max(5.0, y_max * 1.18))
+
+    _add_awake_sleep_background(
+        ax,
+        x_end=max_hour,
+        x_start=0.0,
+        origin_clock_hour=12.0,
+        awake_start_clock_hour=8.0,
+        awake_end_clock_hour=20.0,
+    )
+    _add_day_annotations(ax, x_end=max_hour, x_start=0.0, label_every_days=2, starting_day=0)
+    _add_phase_band(ax, phase_window_table, phase_display_names=phase_display_names)
+
+    width = float(bin_hours) * 0.42
+    x = visits_group["bin_center_hours"]
+    ax.bar(
+        x - width / 2.0,
+        visits_group["mean_value"],
+        width=width,
+        color="#cfcfcf",
+        edgecolor="#7f7f7f",
+        yerr=visits_group["sem_value"],
+        capsize=2,
+        label="Visits",
+        zorder=3,
+    )
+    ax.bar(
+        x + width / 2.0,
+        secondary_group["mean_value"],
+        width=width,
+        color=color,
+        edgecolor=color,
+        yerr=secondary_group["sem_value"],
+        capsize=2,
+        label=secondary_label,
+        alpha=0.85,
+        zorder=3,
+    )
+
+    ax.set_title(f"{group_name}: visits vs {secondary_label.lower()} across all phases ({bin_hours} h bins)")
+    ax.set_xlabel("Elapsed experimental time [hours]")
+    ax.set_ylabel("Mean count per mouse and bin")
+    ax.grid(axis="y", alpha=0.25)
+    ax.legend(frameon=False)
     fig.tight_layout()
     fig.savefig(output_path, dpi=300)
     plt.close(fig)

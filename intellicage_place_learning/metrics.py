@@ -294,6 +294,18 @@ def compute_experiment_visit_bins(visits: pd.DataFrame, *, bin_hours: int) -> tu
     return _prepare_count_bins(data, time_col="experiment_elapsed_hours", bin_hours=bin_hours)
 
 
+def compute_experiment_drinking_visit_bins(
+    visits: pd.DataFrame,
+    *,
+    bin_hours: int,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Count lick-positive nose-poke visits across the full experiment timeline."""
+
+    data = visits.loc[visits["has_nosepoke"] & visits["visit_has_lick"]].copy()
+    data["_value"] = 1.0
+    return _prepare_count_bins(data, time_col="experiment_elapsed_hours", bin_hours=bin_hours)
+
+
 def compute_phase2_adaptation_bins(
     visits: pd.DataFrame,
     *,
@@ -343,6 +355,23 @@ def compute_place_learning_count_bins(
     phase_visits = visits.loc[visits["PhaseNumber"].eq(phase_number)].copy()
     success_col = "rewarded_place_visit" if strict else "correct_place_visit"
     phase_visits = phase_visits.loc[phase_visits[success_col]].copy()
+    phase_visits["_value"] = 1.0
+    return _prepare_count_bins(
+        phase_visits,
+        time_col="phase_elapsed_hours",
+        bin_hours=bin_hours,
+    )
+
+
+def compute_phase_visit_count_bins(
+    visits: pd.DataFrame,
+    *,
+    phase_number: int,
+    bin_hours: int,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Summarize all visit counts for a selected phase."""
+
+    phase_visits = visits.loc[visits["PhaseNumber"].eq(phase_number)].copy()
     phase_visits["_value"] = 1.0
     return _prepare_count_bins(
         phase_visits,

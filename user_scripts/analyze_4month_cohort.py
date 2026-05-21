@@ -23,10 +23,12 @@ from intellicage_place_learning.loader import load_cohort_data
 from intellicage_place_learning.metrics import (
     build_phase_time_limit_table,
     build_phase_window_table,
+    compute_experiment_drinking_visit_bins,
     compute_experiment_visit_bins,
     compute_phase2_adaptation_bins,
     compute_phase_activity_medians,
     compute_phase_activity_statistics,
+    compute_phase_visit_count_bins,
     compute_place_learning_count_bins,
     compute_place_learning_rate_bins,
     filter_visits_by_phase_limits,
@@ -34,10 +36,13 @@ from intellicage_place_learning.metrics import (
     suggest_common_phase_limits,
 )
 from intellicage_place_learning.plotting import (
+    plot_experiment_dual_metric_bars,
     plot_experiment_overview,
+    plot_experiment_overview_groups,
     plot_phase2_adaptation,
     plot_phase_activity_boxplot,
     plot_phase_learning_counts,
+    plot_phase_learning_counts_groups,
     plot_phase_learning_rate,
     plot_phase_learning_rate_groups,
     sanitize_filename_part,
@@ -50,6 +55,10 @@ DEFAULT_PHASE_DISPLAY_NAMES = {
     2: "NPA",
     3: "PL",
     4: "PR",
+}
+DEFAULT_PHASE_MAX_HOURS = {
+    3: 72.0,
+    4: 72.0,
 }
 
 
@@ -89,10 +98,16 @@ def parse_args() -> argparse.Namespace:
         help="Spread statistic used for shaded areas around the mean.",
     )
     parser.add_argument(
+        "--plot-style",
+        choices=["step", "line"],
+        default="line",
+        help="Mean-trace style to render in the user-facing plots.",
+    )
+    parser.add_argument(
         "--phase-max-hours",
         nargs="*",
         default=[],
-        help="Optional phase limits such as `3=72 4=74`. By default no phase is truncated.",
+        help="Optional phase limits such as `3=72 4=72`. These override the user-script defaults.",
     )
     return parser.parse_args()
 
@@ -142,6 +157,7 @@ def render_overview_plots(
     phase_window_table,
     phase_display_names: dict[int, str],
     spread_metric: str,
+    plot_style: str,
 ) -> None:
     """Create full-experiment visit-activity plots for every pathology group."""
 
@@ -165,7 +181,17 @@ def render_overview_plots(
             phase_display_names=phase_display_names,
             spread_metric=spread_metric,
             x_end_hours=group_end_hours.get(group_name),
+            plot_style=plot_style,
         )
+
+    plot_experiment_overview_groups(
+        summary_bins,
+        output_path=output_dir / "plots" / f"overview_all_phases_visits_all_groups_{bin_hours}h.png",
+        phase_window_table=phase_window_table,
+        phase_display_names=phase_display_names,
+        spread_metric=spread_metric,
+        plot_style=plot_style,
+    )
 
 
 def render_phase2_plots(
@@ -213,6 +239,39 @@ def render_phase2_plots(
         )
 
 
+def render_phase2_control_plots(
+    visits,
+    output_dir: Path,
+    *,
+    bin_hours: int,
+    group_names: list[str],
+    phase_window_table,
+    phase_display_names: dict[int, str],
+) -> None:
+    """Create full-experiment control plots for visits versus drinking visits."""
+
+    primary_mouse, primary_summary = compute_experiment_visit_bins(visits, bin_hours=bin_hours)
+    drinking_mouse, drinking_summary = compute_experiment_drinking_visit_bins(visits, bin_hours=bin_hours)
+    save_table(primary_mouse, output_dir / f"phase2_control_all_phases_visits_mouse_bins_{bin_hours}h.tsv")
+    save_table(primary_summary, output_dir / f"phase2_control_all_phases_visits_group_summary_{bin_hours}h.tsv")
+    save_table(drinking_mouse, output_dir / f"phase2_control_all_phases_drinking_visits_mouse_bins_{bin_hours}h.tsv")
+    save_table(drinking_summary, output_dir / f"phase2_control_all_phases_drinking_visits_group_summary_{bin_hours}h.tsv")
+
+    for group_name in group_names:
+        plot_experiment_dual_metric_bars(
+            primary_summary,
+            drinking_summary,
+            group_name=group_name,
+            bin_hours=bin_hours,
+            output_path=output_dir
+            / "plots"
+            / f"phase2_control_all_phases_visits_vs_drinking_visits_{sanitize_filename_part(group_name)}_{bin_hours}h.png",
+            secondary_label="Drinking visits",
+            phase_window_table=phase_window_table,
+            phase_display_names=phase_display_names,
+        )
+
+
 def render_phase_learning_plots(
     visits,
     output_dir: Path,
@@ -221,6 +280,7 @@ def render_phase_learning_plots(
     group_names: list[str],
     phase_display_names: dict[int, str],
     spread_metric: str,
+    plot_style: str,
 ) -> None:
     """Create phase-3 and phase-4 count and rate plots."""
 
@@ -230,6 +290,11 @@ def render_phase_learning_plots(
     phase_end_hours = (visits.groupby("PhaseNumber", observed=True)["phase_elapsed_hours"].max() + float(bin_hours)).astype(float).to_dict()
 
     for phase_number in (3, 4):
+        phase_visit_mouse, phase_visit_summary = compute_phase_visit_count_bins(
+            visits,
+            phase_number=phase_number,
+            bin_hours=bin_hours,
+        )
         strict_count_mouse, strict_count_summary = compute_place_learning_count_bins(
             visits,
             phase_number=phase_number,
@@ -249,6 +314,14 @@ def render_phase_learning_plots(
             strict=False,
         )
 
+        save_table(
+            phase_visit_mouse,
+            output_dir / f"phase{phase_number}_all_visit_counts_mouse_bins_{bin_hours}h.tsv",
+        )
+        save_table(
+            phase_visit_summary,
+            output_dir / f"phase{phase_number}_all_visit_counts_group_summary_{bin_hours}h.tsv",
+        )
         save_table(
             strict_count_mouse,
             output_dir / f"phase{phase_number}_correct_rewarded_visits_absolute_mouse_bins_{bin_hours}h.tsv",
@@ -287,6 +360,7 @@ def render_phase_learning_plots(
                 / f"phase{phase_number}_correct_rewarded_visits_absolute_{sanitize_filename_part(group_name)}_{bin_hours}h.png",
                 spread_metric=spread_metric,
                 x_end_hours=phase_group_end_hours.get((group_name, phase_number)),
+                plot_style=plot_style,
             )
             plot_phase_learning_rate(
                 strict_rate_mouse,
@@ -300,6 +374,7 @@ def render_phase_learning_plots(
                 / f"phase{phase_number}_correct_rewarded_visit_rate_{sanitize_filename_part(group_name)}_{bin_hours}h.png",
                 spread_metric=spread_metric,
                 x_end_hours=phase_group_end_hours.get((group_name, phase_number)),
+                plot_style=plot_style,
             )
 
         plot_phase_learning_rate_groups(
@@ -312,6 +387,20 @@ def render_phase_learning_plots(
             / f"phase{phase_number}_correct_rewarded_visit_rate_all_groups_{bin_hours}h.png",
             spread_metric=spread_metric,
             x_end_hours=phase_end_hours.get(phase_number),
+            plot_style=plot_style,
+        )
+        plot_phase_learning_counts_groups(
+            phase_visit_summary,
+            phase_display_name=phase_display_names[phase_number],
+            bin_hours=bin_hours,
+            output_path=output_dir
+            / "plots"
+            / f"phase{phase_number}_all_visit_counts_all_groups_{bin_hours}h.png",
+            spread_metric=spread_metric,
+            x_end_hours=phase_end_hours.get(phase_number),
+            plot_style=plot_style,
+            title_prefix="All visit counts across groups",
+            ylabel="All visits per mouse and bin",
         )
 
 
@@ -340,7 +429,8 @@ def main() -> None:
     """Run the full 4-month place-learning workflow from raw data to plots."""
 
     args = parse_args()
-    phase_limits = parse_phase_limits(args.phase_max_hours)
+    phase_limits = DEFAULT_PHASE_MAX_HOURS.copy()
+    phase_limits.update(parse_phase_limits(args.phase_max_hours))
     dataset_root = args.dataset_root
     output_root = resolve_output_root(dataset_root, args.results_subdir)
     output_root.mkdir(parents=True, exist_ok=True)
@@ -379,6 +469,7 @@ def main() -> None:
             phase_window_table=phase_window_table,
             phase_display_names=DEFAULT_PHASE_DISPLAY_NAMES,
             spread_metric=args.spread_metric,
+            plot_style=args.plot_style,
         )
         render_phase2_plots(
             filtered_visits,
@@ -388,6 +479,14 @@ def main() -> None:
             secondary_metric=args.phase2_secondary_metric,
             phase_display_names=DEFAULT_PHASE_DISPLAY_NAMES,
         )
+        render_phase2_control_plots(
+            filtered_visits,
+            bin_dir,
+            bin_hours=bin_hours,
+            group_names=group_names,
+            phase_window_table=phase_window_table,
+            phase_display_names=DEFAULT_PHASE_DISPLAY_NAMES,
+        )
         render_phase_learning_plots(
             filtered_visits,
             bin_dir,
@@ -395,6 +494,7 @@ def main() -> None:
             group_names=group_names,
             phase_display_names=DEFAULT_PHASE_DISPLAY_NAMES,
             spread_metric=args.spread_metric,
+            plot_style=args.plot_style,
         )
 
     render_phase_activity_plot(
