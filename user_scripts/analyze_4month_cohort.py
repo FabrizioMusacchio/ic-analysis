@@ -67,7 +67,7 @@ from intellicage_place_learning.plotting import (
     set_group_colors,
 )
 # %% PARAMETERS AND DEFAULTS
-defAULT_DATASET_ROOT = PROJECT_ROOT / "Data IntelliCage" / "BioMedX_4MonthCohort_2019"
+DEFAULT_DATASET_ROOT = PROJECT_ROOT / "Data IntelliCage" / "BioMedX_4MonthCohort_2019"
 DEFAULT_PHASE_DISPLAY_NAMES = {
     1: "Free Hab",
     2: "NPA",
@@ -119,7 +119,6 @@ USER_AWAKE_DURATION_HOURS = DEFAULT_AWAKE_DURATION_HOURS
 USER_SCHEDULED_PHASE_START_HOURS = DEFAULT_SCHEDULED_PHASE_START_HOURS.copy()
 USER_BASE_FONT_SIZE = 10.0
 USER_EXCLUDE_VIOLIN_OUTLIERS = True
-
 # %% FUNCTIONS
 def parse_numeric_mapping(raw_items: list[str]) -> dict[int, float]:
     """Parse `key=value` CLI strings into a numeric dictionary."""
