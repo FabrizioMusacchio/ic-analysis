@@ -1278,6 +1278,7 @@ def run_analysis(
     output_root = resolve_output_root(dataset_root, results_subdir)
     output_root.mkdir(parents=True, exist_ok=True)
 
+    print(f"Loading cohort data from {dataset_root}...")
     cohort = load_cohort_data(dataset_root)
     aligned_visits = attach_analysis_time_columns(
         cohort.visits,
@@ -1334,11 +1335,15 @@ def run_analysis(
         ),
         output_root / "scheduled_phase_start_hours.tsv",
     )
-
+    print(f"done. Output root directory: {output_root}")
+    
+    print("Filtering visits by phase time limits...")
     filtered_visits = filter_visits_by_phase_limits(selected_visits, merged_phase_limits)
     filtered_visits.to_csv(csv_output_path(output_root / "merged_visits.tsv.gz"), sep="\t", index=False, compression="gzip")
     selected_nosepokes.to_csv(csv_output_path(output_root / "merged_nosepokes.tsv.gz"), sep="\t", index=False, compression="gzip")
+    print("done.")
 
+    print("Rendering analysis plots...")
     group_names = ordered_group_names(filtered_visits)
     phase_window_table = build_analysis_phase_window_table(filtered_visits, merged_scheduled_phase_starts)
     save_table(phase_window_table, output_root / "analysis_phase_windows.tsv")
@@ -1352,7 +1357,9 @@ def run_analysis(
         ),
         output_root / "suggested_common_phase_limits.tsv",
     )
-
+    print(f"done. Rendered plots will be saved to {output_root} in subdirectories by binning parameter.")
+    
+    print("Rendering phase-aligned learning curves and visit counts across groups and binning parameters...")
     for current_bin_hours in sorted(set(bin_hours)):
         bin_dir = output_root / f"{current_bin_hours}h_bins"
         render_overview_plots(
@@ -1407,11 +1414,13 @@ def run_analysis(
             mouse_day_start_hour=mouse_day_start_hour,
             awake_end_clock_hour=awake_end_clock_hour,
         )
+    print("Rendering phase activity, segment, awake-day, experience-learning, and cumulative role plots...")
     render_phase_activity_plot(
         filtered_visits,
         output_root,
         phase_display_names=DEFAULT_PHASE_DISPLAY_NAMES,
     )
+    print("done. Rendering awake/sleep segment plots...")
     render_phase_segment_plots(
         filtered_visits,
         output_root,
@@ -1421,6 +1430,7 @@ def run_analysis(
         mouse_day_start_hour=mouse_day_start_hour,
         awake_end_clock_hour=awake_end_clock_hour,
     )
+    print("done. Rendering awake-day violin plots...")
     render_awake_day_violin_plots(
         filtered_visits,
         output_root,
@@ -1430,6 +1440,7 @@ def run_analysis(
         awake_end_clock_hour=awake_end_clock_hour,
         exclude_outliers=exclude_violin_outliers,
     )
+    print("done. Rendering experience-learning plots...")
     render_experience_learning_plots(
         filtered_visits,
         output_root,
@@ -1437,6 +1448,7 @@ def run_analysis(
         spread_metric=spread_metric,
         exclude_outliers=exclude_violin_outliers,
     )
+    print("done. Rendering cumulative role plots...")
     render_cumulative_role_plots(
         filtered_visits,
         output_root,
@@ -1448,8 +1460,8 @@ def run_analysis(
         mouse_day_start_hour=mouse_day_start_hour,
         awake_end_clock_hour=awake_end_clock_hour,
     )
+    print("done. All analysis plots rendered.")
     return output_root
-
 # %% MAIN FUNCTION
 def main() -> None:
     """Run the full 4-month place-learning workflow from in-script settings."""

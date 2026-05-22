@@ -49,16 +49,16 @@ ROLE_COLORS = {
     "Neutral corner 2": "#b0b0b0",
 }
 CM_TO_INCH = 2.54
-LONG_FIGSIZE_CM = (16.2, 9.4)
-PHASE2_FIGSIZE_CM = (10.4, 7.0)
-MEDIUM_FIGSIZE_CM = (11.8, 7.6)
-MEDIUM_WIDE_FIGSIZE_CM = (12.8, 8.0)
-SEGMENT_FIGSIZE_CM = (12.6, 7.9)
-VIOLIN_FIGSIZE_CM = (6.2, 7.2)
-ONSET_FIGSIZE_CM = (6.2, 7.0)
-ACTIVITY_FIGSIZE_CM = (8.8, 8.1)
-WIDE_GROUP_FIGSIZE_CM = (15.4, 9.0)
-
+LONG_FIGSIZE_CM         = (18.2, 7.4)
+LONG_FIGSIZE_2_CM       = (15.2, 7.4)
+PHASE2_FIGSIZE_CM       = (10.4, 7.0)
+MEDIUM_FIGSIZE_CM       = (11.8, 7.6)
+MEDIUM_WIDE_FIGSIZE_CM  = (12.8, 8.0)
+SEGMENT_FIGSIZE_CM      = (12.6, 7.9)
+VIOLIN_FIGSIZE_CM       = (5.8, 7.2)
+ONSET_FIGSIZE_CM        = (5.8, 7.0)
+ACTIVITY_FIGSIZE_CM     = (8.8, 8.1)
+WIDE_GROUP_FIGSIZE_CM   = (18.2, 7.4)
 # %% FUNCTIONS
 def set_group_colors(color_mapping: dict[str, str] | None) -> None:
     """Update the global pathology-group color mapping used across all plots."""
@@ -1205,7 +1205,7 @@ def plot_experiment_dual_metric_bars(
 
     _prepare_output_path(output_path)
     color = _group_color(group_name)
-    fig, ax = plt.subplots(figsize=_figsize_cm(*LONG_FIGSIZE_CM))
+    fig, ax = plt.subplots(figsize=_figsize_cm(*LONG_FIGSIZE_2_CM))
     spread_col = _spread_column(spread_metric)
     max_hour = float(visits_group["bin_end_hours"].max())
     ax.set_xlim(0, max_hour)
@@ -1506,7 +1506,7 @@ def plot_group_day_violin(
             )
 
     ax.set_xticks(positions)
-    ax.set_xticklabels(group_order, rotation=20, ha="right")
+    ax.set_xticklabels(group_order, rotation=25, ha="right")
     _format_rate_axis(ax, ylabel=ylabel)
     ax.set_title(f"{_title_start(metric_title)}\n{phase_display_name} day {phase_day} awake")
     ax.grid(False)
@@ -1620,8 +1620,9 @@ def plot_cumulative_role_curves(
                 [y_value],
                 color="#c1121f",
                 edgecolor="white",
-                linewidth=0.6,
-                s=34,
+                linewidth=0.0,
+                s=12,
+                alpha=0.75,
                 label="Learning onset" if not onset_label_drawn else None,
                 zorder=6,
             )
