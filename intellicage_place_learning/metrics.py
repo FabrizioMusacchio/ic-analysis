@@ -20,6 +20,50 @@ from statsmodels.stats.multitest import multipletests
 SpreadMetric = Literal["sem", "std"]
 
 
+def flag_iqr_outliers(
+    data: pd.DataFrame,
+    *,
+    value_col: str,
+    group_cols: list[str],
+    fence_factor: float = 1.5,
+    min_group_size: int = 4,
+) -> pd.DataFrame:
+    """Flag IQR-based outliers within user-defined groups.
+
+    The returned frame keeps all original rows and appends the columns
+    `is_outlier`, `outlier_lower_fence`, and `outlier_upper_fence`.
+    Outlier detection is only applied when a subgroup contains at least
+    `min_group_size` non-missing values.
+    """
+
+    flagged = data.copy()
+    flagged["is_outlier"] = False
+    flagged["outlier_lower_fence"] = np.nan
+    flagged["outlier_upper_fence"] = np.nan
+    if flagged.empty:
+        return flagged
+
+    for _, subgroup in flagged.groupby(group_cols, observed=True, dropna=False):
+        valid = subgroup[value_col].dropna().to_numpy(dtype=float)
+        if len(valid) < min_group_size:
+            continue
+        q1 = float(np.quantile(valid, 0.25))
+        q3 = float(np.quantile(valid, 0.75))
+        iqr = q3 - q1
+        lower = q1 - float(fence_factor) * iqr
+        upper = q3 + float(fence_factor) * iqr
+        subgroup_index = subgroup.index
+        flagged.loc[subgroup_index, "outlier_lower_fence"] = lower
+        flagged.loc[subgroup_index, "outlier_upper_fence"] = upper
+        if iqr <= 0:
+            continue
+        flagged.loc[subgroup_index, "is_outlier"] = (
+            flagged.loc[subgroup_index, value_col].lt(lower)
+            | flagged.loc[subgroup_index, value_col].gt(upper)
+        ).fillna(False)
+    return flagged
+
+
 def infer_phase_boundaries(phase_manifest: pd.DataFrame) -> dict[int, float]:
     """Infer experiment-relative phase start hours from the manifest."""
 
@@ -669,10 +713,13 @@ def compute_group_day_violin_statistics(
     phase_number: int,
     metric_name: str,
     chance_level: float,
+    exclude_outliers: bool = False,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Compute omnibus, pairwise, and chance-level statistics for one phase/day-rate panel set."""
 
     phase_data = mouse_day_rates.loc[mouse_day_rates["PhaseNumber"].eq(phase_number)].copy()
+    if exclude_outliers and "is_outlier" in phase_data.columns:
+        phase_data = phase_data.loc[~phase_data["is_outlier"].fillna(False)].copy()
     omnibus_rows: list[dict[str, object]] = []
     pairwise_rows: list[dict[str, object]] = []
     chance_rows: list[dict[str, object]] = []
@@ -797,10 +844,14 @@ def compute_group_day_violin_statistics(
 def compute_role_cumulative_curves(
     visits: pd.DataFrame,
     *,
-    bin_hours: int,
     pre_phase_hours: float = 24.0,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Compute cumulative and relative cumulative corner-role visits across late NPA, PL, and PR."""
+    """Compute event-based cumulative corner-role visits across late NPA, PL, and PR.
+
+    This version is intentionally not time-binned. Each cumulative step is
+    aligned to the actual visit-event times, which keeps the trajectories as
+    close as possible to the underlying behavioral sequence.
+    """
 
     phase3_start = (
         visits.loc[visits["AnalysisPhaseNumber"].eq(3), "analysis_phase_start_hours"].dropna().min()
@@ -811,7 +862,8 @@ def compute_role_cumulative_curves(
     phase_visits = visits.copy()
     phase_visits["combined_phase_elapsed_hours"] = phase_visits["analysis_experiment_elapsed_hours"] - float(phase3_start)
     phase_visits = phase_visits.loc[
-        phase_visits["combined_phase_elapsed_hours"].between(-float(pre_phase_hours), 144.0, inclusive="both")
+        phase_visits["AnalysisPhaseNumber"].between(1, 4)
+        & phase_visits["combined_phase_elapsed_hours"].le(144.0)
     ].copy()
     if phase_visits.empty:
         return pd.DataFrame(), pd.DataFrame()
@@ -833,71 +885,83 @@ def compute_role_cumulative_curves(
 
     phase_visits["corner_role"] = phase_visits.apply(role_for_row, axis=1)
     phase_visits = phase_visits.loc[phase_visits["corner_role"].notna()].copy()
-    phase_visits["bin_start_hours"] = np.floor(phase_visits["combined_phase_elapsed_hours"] / float(bin_hours)) * float(
-        bin_hours
-    )
-    role_counts = (
-        phase_visits.groupby(
-            ["Group", "ET", "ETLabel", "SEX", "corner_role", "bin_start_hours"],
-            observed=True,
-        )["VisitID"]
-        .size()
-        .reset_index(name="value")
-    )
-    total_counts = (
-        phase_visits.groupby(["Group", "ET", "ETLabel", "SEX", "bin_start_hours"], observed=True)["VisitID"]
-        .size()
-        .reset_index(name="all_visits")
-    )
+    visible_phase_visits = phase_visits.loc[
+        phase_visits["combined_phase_elapsed_hours"].between(-float(pre_phase_hours), 144.0, inclusive="both")
+    ].copy()
+    if visible_phase_visits.empty:
+        return pd.DataFrame(), pd.DataFrame()
+    role_levels = ["PL target corner", "PR target corner", "Neutral corner 1", "Neutral corner 2"]
+    mouse_rows: list[dict[str, object]] = []
+    max_time = float(visible_phase_visits["combined_phase_elapsed_hours"].max())
+    min_time = -float(pre_phase_hours)
 
-    mice = phase_visits.loc[:, ["Group", "ET", "ETLabel", "SEX"]].drop_duplicates().reset_index(drop=True)
-    roles = pd.DataFrame({"corner_role": ["PL target corner", "PR target corner", "Neutral corner 1", "Neutral corner 2"]})
-    max_time = float(phase_visits["combined_phase_elapsed_hours"].max())
-    min_time = float(np.floor(float(pre_phase_hours) / float(bin_hours)) * float(bin_hours) * -1.0)
-    all_bins = pd.DataFrame(
-        {
-            "bin_start_hours": np.arange(
-                min_time,
-                np.floor(max_time / float(bin_hours)) * float(bin_hours) + float(bin_hours),
-                float(bin_hours),
+    for group_name, group_data in phase_visits.groupby("Group", observed=True):
+        visible_group_data = group_data.loc[
+            group_data["combined_phase_elapsed_hours"].between(min_time, max_time, inclusive="both")
+        ].copy()
+        if visible_group_data.empty:
+            continue
+        timeline = np.unique(
+            np.concatenate(
+                (
+                    np.array([min_time], dtype=float),
+                    visible_group_data["combined_phase_elapsed_hours"].to_numpy(dtype=float),
+                    np.array([max_time], dtype=float),
+                )
             )
-        }
-    )
-    mice["__key"] = 1
-    roles["__key"] = 1
-    all_bins["__key"] = 1
-    full_index = mice.merge(roles, on="__key").merge(all_bins, on="__key").drop(columns="__key")
-    mouse_counts = full_index.merge(
-        role_counts,
-        on=["Group", "ET", "ETLabel", "SEX", "corner_role", "bin_start_hours"],
-        how="left",
-    )
-    mouse_counts["value"] = mouse_counts["value"].fillna(0.0)
-    mouse_counts = mouse_counts.merge(
-        total_counts,
-        on=["Group", "ET", "ETLabel", "SEX", "bin_start_hours"],
-        how="left",
-    )
-    mouse_counts["all_visits"] = mouse_counts["all_visits"].fillna(0.0)
-    mouse_counts["bin_end_hours"] = mouse_counts["bin_start_hours"] + float(bin_hours)
-    mouse_counts["bin_center_hours"] = mouse_counts["bin_start_hours"] + float(bin_hours) / 2.0
-    mouse_counts = mouse_counts.sort_values(["Group", "ET", "corner_role", "bin_start_hours"]).reset_index(drop=True)
-    mouse_counts["cumulative_value"] = mouse_counts.groupby(["Group", "ET", "corner_role"], observed=True)["value"].cumsum()
-    total_counts = total_counts.sort_values(["Group", "ET", "bin_start_hours"]).reset_index(drop=True)
-    total_counts["cumulative_all_visits"] = total_counts.groupby(["Group", "ET"], observed=True)["all_visits"].cumsum()
-    mouse_counts = mouse_counts.drop(columns=["all_visits"]).merge(
-        total_counts,
-        on=["Group", "ET", "ETLabel", "SEX", "bin_start_hours"],
-        how="left",
-        validate="many_to_one",
-    )
-    mouse_counts["all_visits"] = mouse_counts["all_visits"].fillna(0.0)
-    mouse_counts["cumulative_all_visits"] = mouse_counts["cumulative_all_visits"].fillna(0.0)
-    mouse_counts["relative_cumulative_value"] = mouse_counts["cumulative_value"] / mouse_counts["cumulative_all_visits"]
-    mouse_counts["relative_cumulative_value"] = mouse_counts["relative_cumulative_value"].where(
-        mouse_counts["cumulative_all_visits"].gt(0),
-        np.nan,
-    )
+        )
+        timeline.sort()
+        if len(timeline) == 0:
+            continue
+        end_times = np.append(timeline[1:], timeline[-1])
+
+        for (et, et_label, sex), mouse_data in group_data.groupby(["ET", "ETLabel", "SEX"], observed=True):
+            mouse_data = mouse_data.loc[mouse_data["combined_phase_elapsed_hours"].le(max_time)].copy()
+            if mouse_data.empty:
+                continue
+            mouse_data = mouse_data.sort_values("combined_phase_elapsed_hours").copy()
+            mouse_data["cumulative_all_visits"] = np.arange(1, len(mouse_data) + 1, dtype=float)
+            for role_name in role_levels:
+                mouse_data[f"cum__{role_name}"] = mouse_data["corner_role"].eq(role_name).astype(float).cumsum()
+
+            collapsed = (
+                mouse_data.groupby("combined_phase_elapsed_hours", observed=True)[
+                    ["cumulative_all_visits", *[f"cum__{role_name}" for role_name in role_levels]]
+                ]
+                .max()
+                .sort_index()
+            )
+            expanded = collapsed.reindex(timeline).ffill().fillna(0.0)
+            expanded = expanded.reset_index().rename(columns={"index": "bin_start_hours", "combined_phase_elapsed_hours": "bin_start_hours"})
+            expanded["bin_start_hours"] = timeline
+            expanded["bin_end_hours"] = end_times
+            expanded["bin_center_hours"] = (expanded["bin_start_hours"] + expanded["bin_end_hours"]) / 2.0
+
+            for role_name in role_levels:
+                role_values = expanded[f"cum__{role_name}"].to_numpy(dtype=float)
+                total_values = expanded["cumulative_all_visits"].to_numpy(dtype=float)
+                relative_values = np.full_like(total_values, np.nan, dtype=float)
+                np.divide(role_values, total_values, out=relative_values, where=total_values > 0)
+                for idx in range(len(expanded)):
+                    mouse_rows.append(
+                        {
+                            "Group": str(group_name),
+                            "ET": et,
+                            "ETLabel": str(et_label),
+                            "SEX": sex,
+                            "corner_role": role_name,
+                            "bin_start_hours": float(expanded["bin_start_hours"].iloc[idx]),
+                            "bin_end_hours": float(expanded["bin_end_hours"].iloc[idx]),
+                            "bin_center_hours": float(expanded["bin_center_hours"].iloc[idx]),
+                            "cumulative_value": float(role_values[idx]),
+                            "cumulative_all_visits": float(total_values[idx]),
+                            "relative_cumulative_value": float(relative_values[idx]) if not np.isnan(relative_values[idx]) else np.nan,
+                        }
+                    )
+
+    mouse_counts = pd.DataFrame(mouse_rows)
+    if mouse_counts.empty:
+        return pd.DataFrame(), pd.DataFrame()
 
     absolute_summary = (
         mouse_counts.groupby(["Group", "corner_role", "bin_start_hours", "bin_end_hours", "bin_center_hours"], observed=True)[
@@ -1096,10 +1160,13 @@ def compute_onset_group_statistics(
     onset_col: str,
     phase_number: int,
     metric_name: str,
+    exclude_outliers: bool = False,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Compute omnibus and pairwise group statistics for one onset metric."""
 
     data = onset_table.loc[onset_table[onset_col].notna()].copy()
+    if exclude_outliers and "is_outlier" in data.columns:
+        data = data.loc[~data["is_outlier"].fillna(False)].copy()
     if data.empty:
         return pd.DataFrame(), pd.DataFrame()
 

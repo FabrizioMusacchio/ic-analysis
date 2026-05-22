@@ -43,6 +43,7 @@ from intellicage_place_learning.metrics import (
     compute_time_window_learning_curves,
     compute_visit_window_learning_curves,
     filter_visits_by_phase_limits,
+    flag_iqr_outliers,
     suggest_common_phase_limits,
 )
 from intellicage_place_learning.plotting import (
@@ -63,6 +64,7 @@ from intellicage_place_learning.plotting import (
     plot_phase4_reversal_components,
     plot_visit_learning_curve_groups,
     sanitize_filename_part,
+    set_group_colors,
 )
 # %% PARAMETERS AND DEFAULTS
 
@@ -85,6 +87,13 @@ DEFAULT_GROUP_RENAMES = {
     "Tau 1-421": "Tau 1-421",
     "Tau 1-441": "Tau 1-441",
 }
+DEFAULT_GROUP_COLORS = {
+    "WT": "#264653",
+    "tdTomato": "#6c757d",
+    "Tau 66-421": "#2a9d8f",
+    "Tau 1-421": "#e9a820",
+    "Tau 1-441": "#4ade80",
+}
 DEFAULT_PHASE2_PLOT_STYLE = "line"
 DEFAULT_MOUSE_DAY_START_HOUR = 6.0
 DEFAULT_AWAKE_DURATION_HOURS = 12.0
@@ -105,10 +114,12 @@ USER_PHASE2_PLOT_STYLE = "line"
 USER_PHASE_MAX_HOURS = DEFAULT_PHASE_MAX_HOURS.copy()
 USER_EXCLUDED_GROUPS = DEFAULT_EXCLUDED_GROUPS.copy()
 USER_GROUP_RENAMES = DEFAULT_GROUP_RENAMES.copy()
+USER_GROUP_COLORS = DEFAULT_GROUP_COLORS.copy()
 USER_MOUSE_DAY_START_HOUR = DEFAULT_MOUSE_DAY_START_HOUR
 USER_AWAKE_DURATION_HOURS = DEFAULT_AWAKE_DURATION_HOURS
 USER_SCHEDULED_PHASE_START_HOURS = DEFAULT_SCHEDULED_PHASE_START_HOURS.copy()
 USER_BASE_FONT_SIZE = 10.0
+USER_EXCLUDE_VIOLIN_OUTLIERS = True
 
 # %% FUNCTIONS
 def parse_numeric_mapping(raw_items: list[str]) -> dict[int, float]:
@@ -164,6 +175,25 @@ def active_period_bounds(mouse_day_start_hour: float, awake_duration_hours: floa
             "Please choose `mouse_day_start_hour + awake_duration_hours <= 24`."
         )
     return mouse_day_start_hour, awake_end_clock_hour
+
+
+def resolved_group_colors(
+    *,
+    group_renames: dict[str, str],
+    group_colors: dict[str, str] | None,
+) -> dict[str, str]:
+    """Resolve group colors against the active rename mapping for plotting."""
+
+    base_colors = DEFAULT_GROUP_COLORS.copy()
+    if group_colors:
+        base_colors.update(group_colors)
+    resolved: dict[str, str] = {}
+    for original_name, color in base_colors.items():
+        resolved[group_renames.get(original_name, original_name)] = color
+    if group_colors:
+        for key, value in group_colors.items():
+            resolved.setdefault(str(key), str(value))
+    return resolved
 
 
 def phase_origin_clock_hour(mouse_day_start_hour: float, scheduled_phase_start_hour: float) -> float:
@@ -908,6 +938,7 @@ def render_awake_day_violin_plots(
     scheduled_phase_start_hours: dict[int, float],
     mouse_day_start_hour: float,
     awake_end_clock_hour: float,
+    exclude_outliers: bool,
 ) -> None:
     """Render awake-only daily violin plots plus omnibus, pairwise, and chance statistics."""
 
@@ -935,11 +966,17 @@ def render_awake_day_violin_plots(
                 max_days=3,
             )
             mouse_table["PhaseNumber"] = phase_number
+            mouse_table = flag_iqr_outliers(
+                mouse_table,
+                value_col="value",
+                group_cols=["phase_day", "Group"],
+            )
             omnibus, pairwise, chance = compute_group_day_violin_statistics(
                 mouse_table,
                 phase_number=phase_number,
                 metric_name=metric_stub,
                 chance_level=chance_level / 100.0,
+                exclude_outliers=exclude_outliers,
             )
             save_table(
                 mouse_table,
@@ -968,6 +1005,7 @@ def render_awake_day_violin_plots(
                     pairwise_stats=pairwise,
                     chance_stats=chance,
                     output_path=output_dir / f"phase{phase_number}_{metric_stub}_awake_day{phase_day}_violin.png",
+                    outlier_col="is_outlier",
                 )
 
 
@@ -975,7 +1013,6 @@ def render_cumulative_role_plots(
     visits,
     output_dir: Path,
     *,
-    bin_hours: int,
     group_names: list[str],
     plot_style: str,
     phase_display_names: dict[int, str],
@@ -984,15 +1021,15 @@ def render_cumulative_role_plots(
     mouse_day_start_hour: float,
     awake_end_clock_hour: float,
 ) -> None:
-    """Render cumulative and relative cumulative PL-to-PR corner-role plots."""
+    """Render event-based cumulative and relative cumulative PL-to-PR corner-role plots."""
 
     pre_phase_hours = 24.0
-    mouse_counts, summary = compute_role_cumulative_curves(visits, bin_hours=bin_hours, pre_phase_hours=pre_phase_hours)
+    mouse_counts, summary = compute_role_cumulative_curves(visits, pre_phase_hours=pre_phase_hours)
     if mouse_counts.empty or summary.empty:
         return
 
-    save_table(mouse_counts, output_dir / f"pl_pr_cumulative_corner_roles_mouse_bins_{bin_hours}h.tsv")
-    save_table(summary, output_dir / f"pl_pr_cumulative_corner_roles_group_summary_{bin_hours}h.tsv")
+    save_table(mouse_counts, output_dir / "pl_pr_cumulative_corner_roles_mouse_events.tsv")
+    save_table(summary, output_dir / "pl_pr_cumulative_corner_roles_group_summary.tsv")
 
     phase_window_table = pd.DataFrame(
         [
@@ -1052,8 +1089,8 @@ def render_cumulative_role_plots(
         plot_cumulative_role_curves(
             absolute_summary,
             group_name=group_name,
-            output_path=output_dir / f"pl_pr_cumulative_corner_roles_absolute_{sanitize_filename_part(group_name)}_{bin_hours}h.png",
-            title_label=f"cumulative corner-role visits from late NPA to PR ({bin_hours} h bins)",
+            output_path=output_dir / f"pl_pr_cumulative_corner_roles_absolute_{sanitize_filename_part(group_name)}.png",
+            title_label="cumulative corner-role visits from late NPA to PR",
             ylabel="Cumulative visits per mouse",
             value_col="mean_value",
             spread_col=f"{spread_metric}_value",
@@ -1069,8 +1106,8 @@ def render_cumulative_role_plots(
         plot_cumulative_role_curves(
             relative_summary,
             group_name=group_name,
-            output_path=output_dir / f"pl_pr_cumulative_corner_roles_relative_{sanitize_filename_part(group_name)}_{bin_hours}h.png",
-            title_label=f"relative cumulative corner-role visits from late NPA to PR ({bin_hours} h bins)",
+            output_path=output_dir / f"pl_pr_cumulative_corner_roles_relative_{sanitize_filename_part(group_name)}.png",
+            title_label="relative cumulative corner-role visits from late NPA to PR",
             ylabel="Relative cumulative visits [%]",
             value_col="mean_value_rate",
             spread_col="sem_value_rate" if spread_metric == "sem" else "std_value_rate",
@@ -1091,6 +1128,7 @@ def render_experience_learning_plots(
     *,
     phase_display_names: dict[int, str],
     spread_metric: str,
+    exclude_outliers: bool,
 ) -> None:
     """Render experience-dependent learning curves and onset violins for PL and PR."""
 
@@ -1118,11 +1156,21 @@ def render_experience_learning_plots(
                 onset_visits,
                 output_dir / f"phase{phase_number}_{metric_stub}_experience_learning_onset.tsv",
             )
+            onset_visits = flag_iqr_outliers(
+                onset_visits,
+                value_col="onset_visit",
+                group_cols=["Group"],
+            )
+            save_table(
+                onset_visits,
+                output_dir / f"phase{phase_number}_{metric_stub}_experience_learning_onset_with_outliers.tsv",
+            )
             onset_omnibus, onset_pairwise = compute_onset_group_statistics(
                 onset_visits,
                 onset_col="onset_visit",
                 phase_number=phase_number,
                 metric_name=metric_stub,
+                exclude_outliers=exclude_outliers,
             )
             save_table(
                 onset_omnibus,
@@ -1148,6 +1196,7 @@ def render_experience_learning_plots(
                 ylabel="Learning onset [visit number]",
                 output_path=output_dir / f"phase{phase_number}_{metric_stub}_experience_learning_onset_violin.png",
                 pairwise_stats=onset_pairwise,
+                outlier_col="is_outlier",
             )
 
             time_curve_mouse, time_curve_summary, onset_hours = compute_time_window_learning_curves(
@@ -1167,11 +1216,21 @@ def render_experience_learning_plots(
                 onset_hours,
                 output_dir / f"phase{phase_number}_{metric_stub}_clocktime_learning_onset.tsv",
             )
+            onset_hours = flag_iqr_outliers(
+                onset_hours,
+                value_col="onset_hours",
+                group_cols=["Group"],
+            )
+            save_table(
+                onset_hours,
+                output_dir / f"phase{phase_number}_{metric_stub}_clocktime_learning_onset_with_outliers.tsv",
+            )
             onset_hour_omnibus, onset_hour_pairwise = compute_onset_group_statistics(
                 onset_hours,
                 onset_col="onset_hours",
                 phase_number=phase_number,
                 metric_name=metric_stub,
+                exclude_outliers=exclude_outliers,
             )
             save_table(
                 onset_hour_omnibus,
@@ -1189,6 +1248,7 @@ def render_experience_learning_plots(
                 ylabel="Learning onset [hours]",
                 output_path=output_dir / f"phase{phase_number}_{metric_stub}_clocktime_learning_onset_violin.png",
                 pairwise_stats=onset_hour_pairwise,
+                outlier_col="is_outlier",
             )
 
 
@@ -1204,10 +1264,12 @@ def run_analysis(
     phase_max_hours: dict[int, float] | None = None,
     excluded_groups: list[str] | None = None,
     group_renames: dict[str, str] | None = None,
+    group_colors: dict[str, str] | None = None,
     mouse_day_start_hour: float = DEFAULT_MOUSE_DAY_START_HOUR,
     awake_duration_hours: float = DEFAULT_AWAKE_DURATION_HOURS,
     scheduled_phase_start_hours: dict[int, float] | None = None,
     base_font_size: float = 10.0,
+    exclude_violin_outliers: bool = True,
 ) -> Path:
     """Run the 4-month cohort pipeline from a normal Python function call.
 
@@ -1225,7 +1287,12 @@ def run_analysis(
     selected_group_renames = DEFAULT_GROUP_RENAMES.copy()
     if group_renames:
         selected_group_renames.update(group_renames)
+    selected_group_colors = resolved_group_colors(
+        group_renames=selected_group_renames,
+        group_colors=group_colors,
+    )
     configure_plot_style(font_size=base_font_size, font_family="Arial")
+    set_group_colors(selected_group_colors)
     awake_start_clock_hour, awake_end_clock_hour = active_period_bounds(
         mouse_day_start_hour,
         awake_duration_hours,
@@ -1259,17 +1326,21 @@ def run_analysis(
                     "awake_duration_hours",
                     "phase2_plot_style",
                     "exclude_groups",
-                    "group_rename_mapping",
-                    "base_font_size",
-                ],
+                        "group_rename_mapping",
+                        "group_color_mapping",
+                        "base_font_size",
+                        "exclude_violin_outliers",
+                    ],
                 "Value": [
                     mouse_day_start_hour,
                     awake_duration_hours,
-                    phase2_plot_style,
-                    ",".join(selected_excluded_groups) if selected_excluded_groups else "",
-                    ";".join(f"{key}={value}" for key, value in selected_group_renames.items()),
-                    base_font_size,
-                ],
+                        phase2_plot_style,
+                        ",".join(selected_excluded_groups) if selected_excluded_groups else "",
+                        ";".join(f"{key}={value}" for key, value in selected_group_renames.items()),
+                        ";".join(f"{key}={value}" for key, value in selected_group_colors.items()),
+                        base_font_size,
+                        exclude_violin_outliers,
+                    ],
             }
         ),
         output_root / "analysis_settings.tsv",
@@ -1358,19 +1429,6 @@ def run_analysis(
             mouse_day_start_hour=mouse_day_start_hour,
             awake_end_clock_hour=awake_end_clock_hour,
         )
-        render_cumulative_role_plots(
-            filtered_visits,
-            bin_dir,
-            bin_hours=current_bin_hours,
-            group_names=group_names,
-            plot_style=plot_style,
-            phase_display_names=DEFAULT_PHASE_DISPLAY_NAMES,
-            spread_metric=spread_metric,
-            scheduled_phase_start_hours=merged_scheduled_phase_starts,
-            mouse_day_start_hour=mouse_day_start_hour,
-            awake_end_clock_hour=awake_end_clock_hour,
-        )
-
     render_phase_activity_plot(
         filtered_visits,
         output_root,
@@ -1392,12 +1450,25 @@ def run_analysis(
         scheduled_phase_start_hours=merged_scheduled_phase_starts,
         mouse_day_start_hour=mouse_day_start_hour,
         awake_end_clock_hour=awake_end_clock_hour,
+        exclude_outliers=exclude_violin_outliers,
     )
     render_experience_learning_plots(
         filtered_visits,
         output_root,
         phase_display_names=DEFAULT_PHASE_DISPLAY_NAMES,
         spread_metric=spread_metric,
+        exclude_outliers=exclude_violin_outliers,
+    )
+    render_cumulative_role_plots(
+        filtered_visits,
+        output_root,
+        group_names=group_names,
+        plot_style=plot_style,
+        phase_display_names=DEFAULT_PHASE_DISPLAY_NAMES,
+        spread_metric=spread_metric,
+        scheduled_phase_start_hours=merged_scheduled_phase_starts,
+        mouse_day_start_hour=mouse_day_start_hour,
+        awake_end_clock_hour=awake_end_clock_hour,
     )
     return output_root
 
@@ -1416,10 +1487,12 @@ def main() -> None:
         phase_max_hours=USER_PHASE_MAX_HOURS,
         excluded_groups=USER_EXCLUDED_GROUPS,
         group_renames=USER_GROUP_RENAMES,
+        group_colors=USER_GROUP_COLORS,
         mouse_day_start_hour=USER_MOUSE_DAY_START_HOUR,
         awake_duration_hours=USER_AWAKE_DURATION_HOURS,
         scheduled_phase_start_hours=USER_SCHEDULED_PHASE_START_HOURS,
         base_font_size=USER_BASE_FONT_SIZE,
+        exclude_violin_outliers=USER_EXCLUDE_VIOLIN_OUTLIERS,
     )
 
 # %% ENTRY POINT
