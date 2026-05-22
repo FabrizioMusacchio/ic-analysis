@@ -41,7 +41,9 @@ Useful options:
 conda run -n ic_placelearning python user_scripts/analyze_4month_cohort.py \
   --bin-hours 1 2 \
   --phase2-secondary-metric lick_positive_visits \
-  --spread-metric sem
+  --spread-metric sem \
+  --plot-style line \
+  --phase2-plot-style line
 ```
 
 Optional phase-time limits can be passed explicitly, for example:
@@ -51,6 +53,14 @@ conda run -n ic_placelearning python user_scripts/analyze_4month_cohort.py \
   --bin-hours 2 \
   --phase-max-hours 4=73.8913
 ```
+
+The user script currently defaults to:
+
+- excluding `WT` from the poster-oriented analysis
+- keeping the original group names unchanged
+- aligning the experiment to mouse day 0 at `06:00`
+- using a `12 h` awake / `12 h` sleep cycle
+- using the protocol phase starts `0 h`, `74 h`, `122 h`, `194 h`, `266 h`
 
 ## Outputs
 
@@ -68,26 +78,38 @@ The output folder contains:
 - binned summary tables for each requested bin size
 - plots for:
   - total visits across the full experiment
-  - phase-2 adaptation
-  - phase-3 and phase-4 rewarded correct visit counts
-  - phase-3 and phase-4 correct visit rates
-  - all-group correct visit rate overlays
+  - phase-2 adaptation and full-experiment phase-2 control plots
+  - phase-3 and phase-4 rewarded correct-corner visit counts
+  - phase-3 and phase-4 correct-corner visit rates
+  - phase-3 and phase-4 correct NP visit rates
+  - phase-3 and phase-4 rewarded correct-corner visit rates
+  - phase-4 reversal corner-component plots
+  - all-group overlays for visit counts and place-learning rates
 
 Plot filenames now include both the phase prefix and the plotted metric, for
-example `phase3_correct_rewarded_visit_rate_*`.
+example `phase3_rewarded_correct_corner_visit_rate_*`.
 
 ## Metric definitions
 
-Two place-learning metrics are kept in parallel:
+The Python workflow keeps four place-learning metrics in parallel:
 
-- `strict_rewarded`
-  Poster-oriented definition: correct corner visit plus at least one linked
-  nose-poke plus at least one lick.
+- `correct_corner_visit_rate`
+  `visits in assigned correct corner / all visits`
+- `correct_np_visit_rate`
+  `visits in assigned correct corner with nose-poke / all visits`
+- `rewarded_correct_corner_visit_rate`
+  `visits in assigned correct corner with nose-poke and licking / all visits`
 - `matlab_placeerror_only`
   Legacy MATLAB-compatible definition: `PlaceError == 0` only.
 
 For phase 2, the default secondary metric is `lick_positive_visits`, because it
 is usually easier to interpret for learning/adaptation than the raw lick count.
+
+For phase 4, additional reversal summaries separate:
+
+- visits to the new correct corner
+- visits to the previous correct corner
+- visits to the neutral incorrect corners
 
 ## Phase naming
 
@@ -99,3 +121,16 @@ Plot titles use the short phase labels:
 - `Phase 4 -> PR`
 
 The filenames keep the explicit `phase1` to `phase4` prefixes.
+
+## Time alignment
+
+The analysis distinguishes between the raw IntelliCage file phases and a second
+poster-oriented aligned timeline:
+
+- day 0 starts at the configured mouse-day onset, default `06:00`
+- the aligned phase windows follow the protocol schedule rather than the exact
+  file boundary
+- awake periods remain unshaded and sleep periods are shaded light grey
+
+This makes datasets with slightly different placement times or slightly delayed
+phase switches directly comparable on a common experimental timeline.

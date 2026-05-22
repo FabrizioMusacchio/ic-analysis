@@ -30,6 +30,12 @@ PREFERRED_GROUP_ORDER: tuple[str, ...] = (
     "Tau 1-421",
     "Tau 1-441",
 )
+PHASE_DISPLAY_LABELS: dict[int, str] = {
+    1: "Phase1",
+    2: "Phase2",
+    3: "Phase3",
+    4: "Phase4",
+}
 
 
 @dataclass(frozen=True)
@@ -172,6 +178,123 @@ def _attach_time_reference_columns(visits: pd.DataFrame, phase_manifest: pd.Data
     return enriched
 
 
+def attach_analysis_time_columns(
+    visits: pd.DataFrame,
+    phase_manifest: pd.DataFrame,
+    *,
+    scheduled_phase_start_hours: dict[int, float],
+    mouse_day_start_hour: float,
+) -> pd.DataFrame:
+    """Attach globally aligned analysis-time columns.
+
+    The raw IntelliCage exports store visits in phase-specific files and the
+    actual file boundaries can differ by a small amount from the intended
+    protocol timing. For poster-style cross-group comparisons we therefore
+    create a second time axis:
+
+    - experimental time starts at the mouse-day onset of day 0
+    - protocol phase windows are assigned from a global schedule in elapsed
+      hours rather than from the raw file boundary
+    - phase-relative elapsed time is then computed from this scheduled phase
+      start
+
+    Parameters
+    ----------
+    visits:
+        Visit-level table returned by :func:`load_cohort_data`.
+    phase_manifest:
+        Manifest with the observed temporal range of each raw phase file.
+    scheduled_phase_start_hours:
+        Mapping from phase number to global experiment-relative start hour.
+        An additional trailing marker, for example ``5=266``, can be provided
+        to define the exclusive end of phase 4.
+    mouse_day_start_hour:
+        Clock time that defines the beginning of the mouse day on day 0.
+    """
+
+    enriched = visits.copy()
+    phase1_starts = (
+        phase_manifest.loc[phase_manifest["PhaseNumber"].eq(1), ["RunGroup", "PhaseStart"]]
+        .rename(columns={"PhaseStart": "Phase1ObservedStart"})
+        .copy()
+    )
+    enriched = enriched.merge(phase1_starts, on="RunGroup", how="left", validate="many_to_one")
+    if enriched["Phase1ObservedStart"].isna().any():
+        raise ValueError("Could not determine the observed phase-1 start for every run group.")
+
+    phase1_floor_day = enriched["Phase1ObservedStart"].dt.floor("D")
+    tentative_start = phase1_floor_day + pd.to_timedelta(mouse_day_start_hour, unit="h")
+    starts_before_day_anchor = enriched["Phase1ObservedStart"] < tentative_start
+    enriched["AnalysisExperimentStart"] = tentative_start.where(
+        ~starts_before_day_anchor,
+        tentative_start - pd.to_timedelta(1, unit="D"),
+    )
+    enriched["analysis_experiment_elapsed_hours"] = (
+        enriched["Start"] - enriched["AnalysisExperimentStart"]
+    ).dt.total_seconds() / 3600.0
+    enriched["analysis_experiment_day"] = np.floor(
+        enriched["analysis_experiment_elapsed_hours"] / 24.0
+    ).astype(int)
+
+    sorted_phase_starts = sorted((int(key), float(value)) for key, value in scheduled_phase_start_hours.items())
+    if not sorted_phase_starts:
+        raise ValueError("`scheduled_phase_start_hours` must contain at least one phase start.")
+
+    phase_rows: list[dict[str, float | int | str]] = []
+    for index, (phase_number, start_hour) in enumerate(sorted_phase_starts):
+        next_start = sorted_phase_starts[index + 1][1] if index + 1 < len(sorted_phase_starts) else np.inf
+        phase_rows.append(
+            {
+                "AnalysisPhaseNumber": phase_number,
+                "analysis_phase_start_hours": start_hour,
+                "analysis_phase_end_hours": next_start,
+                "AnalysisPhase": PHASE_DISPLAY_LABELS.get(phase_number, f"Phase{phase_number}"),
+            }
+        )
+
+    phase_table = pd.DataFrame(phase_rows)
+    valid_phase_table = phase_table.loc[phase_table["AnalysisPhaseNumber"].between(1, 4)].copy()
+    bins = [-np.inf, *valid_phase_table["analysis_phase_end_hours"].tolist()]
+    labels = valid_phase_table["AnalysisPhaseNumber"].tolist()
+    enriched["AnalysisPhaseNumber"] = pd.cut(
+        enriched["analysis_experiment_elapsed_hours"],
+        bins=bins,
+        labels=labels,
+        right=False,
+    ).astype("Float64")
+    enriched["AnalysisPhaseNumber"] = enriched["AnalysisPhaseNumber"].astype("Int64")
+    phase_start_lookup = valid_phase_table.set_index("AnalysisPhaseNumber")["analysis_phase_start_hours"]
+    phase_name_lookup = valid_phase_table.set_index("AnalysisPhaseNumber")["AnalysisPhase"]
+    enriched["analysis_phase_start_hours"] = enriched["AnalysisPhaseNumber"].map(phase_start_lookup)
+    enriched["analysis_phase_elapsed_hours"] = (
+        enriched["analysis_experiment_elapsed_hours"] - enriched["analysis_phase_start_hours"]
+    )
+    enriched["analysis_phase_day"] = np.floor(enriched["analysis_phase_elapsed_hours"] / 24.0).astype("Int64") + 1
+    enriched["AnalysisPhase"] = enriched["AnalysisPhaseNumber"].map(phase_name_lookup).astype("string")
+    enriched["AnalysisAssignedCorner"] = pd.Series(pd.NA, index=enriched.index, dtype="Int64")
+    enriched.loc[enriched["AnalysisPhaseNumber"].eq(3), "AnalysisAssignedCorner"] = enriched.loc[
+        enriched["AnalysisPhaseNumber"].eq(3), "CornerPhase3"
+    ]
+    enriched.loc[enriched["AnalysisPhaseNumber"].eq(4), "AnalysisAssignedCorner"] = enriched.loc[
+        enriched["AnalysisPhaseNumber"].eq(4), "CornerPhase4"
+    ]
+    enriched["correct_corner_visit"] = enriched["Corner"].eq(enriched["AnalysisAssignedCorner"])
+    enriched["correct_np_visit"] = enriched["correct_corner_visit"] & enriched["has_nosepoke"]
+    enriched["rewarded_correct_corner_visit"] = (
+        enriched["correct_corner_visit"] & enriched["has_nosepoke"] & enriched["visit_has_lick"]
+    )
+    enriched["previous_correct_corner_visit"] = (
+        enriched["AnalysisPhaseNumber"].eq(4) & enriched["Corner"].eq(enriched["CornerPhase3"])
+    )
+    enriched["neutral_incorrect_corner_visit"] = (
+        enriched["AnalysisPhaseNumber"].eq(4)
+        & enriched["Corner"].notna()
+        & ~enriched["Corner"].eq(enriched["CornerPhase4"])
+        & ~enriched["Corner"].eq(enriched["CornerPhase3"])
+    )
+    return enriched
+
+
 def load_cohort_data(dataset_root: Path | str) -> CohortData:
     """Load and harmonize one IntelliCage cohort directory."""
 
@@ -248,8 +371,20 @@ def load_cohort_data(dataset_root: Path | str) -> CohortData:
     ]
     visits["assigned_corner_visit"] = visits["Corner"].eq(visits["AssignedCorner"])
     visits["correct_place_visit"] = visits["PlaceError"].eq(0)
+    visits["correct_corner_visit"] = visits["assigned_corner_visit"]
+    visits["correct_np_visit"] = visits["assigned_corner_visit"] & visits["has_nosepoke"]
     visits["rewarded_place_visit"] = (
         visits["correct_place_visit"] & visits["has_nosepoke"] & visits["visit_has_lick"]
+    )
+    visits["rewarded_correct_corner_visit"] = (
+        visits["assigned_corner_visit"] & visits["has_nosepoke"] & visits["visit_has_lick"]
+    )
+    visits["previous_correct_corner_visit"] = visits["PhaseNumber"].eq(4) & visits["Corner"].eq(visits["CornerPhase3"])
+    visits["neutral_incorrect_corner_visit"] = (
+        visits["PhaseNumber"].eq(4)
+        & visits["Corner"].notna()
+        & ~visits["Corner"].eq(visits["CornerPhase4"])
+        & ~visits["Corner"].eq(visits["CornerPhase3"])
     )
     visits["phase2_drinking_visit"] = (
         visits["PhaseNumber"].eq(2) & visits["has_nosepoke"] & visits["visit_has_lick"]

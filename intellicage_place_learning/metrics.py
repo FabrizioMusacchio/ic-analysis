@@ -95,28 +95,34 @@ def filter_visits_by_phase_limits(
     keep_mask = pd.Series(True, index=filtered.index)
     for phase_number, max_hours in phase_max_hours.items():
         keep_mask &= ~(
-            filtered["PhaseNumber"].eq(int(phase_number)) & filtered["phase_elapsed_hours"].gt(float(max_hours))
+            filtered["AnalysisPhaseNumber"].eq(int(phase_number))
+            & filtered["analysis_phase_elapsed_hours"].gt(float(max_hours))
         )
     return filtered.loc[keep_mask].copy()
 
 
-def build_phase_window_table(
+def build_analysis_phase_window_table(
     visits: pd.DataFrame,
-    phase_boundaries: dict[int, float],
+    scheduled_phase_start_hours: dict[int, float],
 ) -> pd.DataFrame:
-    """Describe the visible start and end of every phase after filtering."""
+    """Describe the visible protocol phase windows on the aligned timeline."""
 
+    sorted_starts = sorted((int(key), float(value)) for key, value in scheduled_phase_start_hours.items())
+    if not sorted_starts:
+        return pd.DataFrame(columns=["PhaseNumber", "start_hours", "end_hours", "duration_hours"])
+
+    global_end_hour = float(visits["analysis_experiment_elapsed_hours"].max()) if not visits.empty else 0.0
     rows: list[dict[str, float | int]] = []
-    for phase_number in sorted(phase_boundaries):
-        phase_visits = visits.loc[visits["PhaseNumber"].eq(phase_number)]
-        if phase_visits.empty:
+    for index, (phase_number, start_hour) in enumerate(sorted_starts):
+        if phase_number not in {1, 2, 3, 4}:
             continue
+        next_start = sorted_starts[index + 1][1] if index + 1 < len(sorted_starts) else global_end_hour
         rows.append(
             {
-                "PhaseNumber": int(phase_number),
-                "start_hours": float(phase_boundaries[phase_number]),
-                "end_hours": float(phase_visits["experiment_elapsed_hours"].max()),
-                "duration_hours": float(phase_visits["phase_elapsed_hours"].max()),
+                "PhaseNumber": phase_number,
+                "start_hours": start_hour,
+                "end_hours": min(float(next_start), global_end_hour),
+                "duration_hours": min(float(next_start), global_end_hour) - float(start_hour),
             }
         )
     return pd.DataFrame(rows)
@@ -291,7 +297,7 @@ def compute_experiment_visit_bins(visits: pd.DataFrame, *, bin_hours: int) -> tu
 
     data = visits.copy()
     data["_value"] = 1.0
-    return _prepare_count_bins(data, time_col="experiment_elapsed_hours", bin_hours=bin_hours)
+    return _prepare_count_bins(data, time_col="analysis_experiment_elapsed_hours", bin_hours=bin_hours)
 
 
 def compute_experiment_drinking_visit_bins(
@@ -303,7 +309,31 @@ def compute_experiment_drinking_visit_bins(
 
     data = visits.loc[visits["has_nosepoke"] & visits["visit_has_lick"]].copy()
     data["_value"] = 1.0
-    return _prepare_count_bins(data, time_col="experiment_elapsed_hours", bin_hours=bin_hours)
+    return _prepare_count_bins(data, time_col="analysis_experiment_elapsed_hours", bin_hours=bin_hours)
+
+
+def compute_experiment_nosepoke_count_bins(
+    visits: pd.DataFrame,
+    *,
+    bin_hours: int,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Sum nose-poke event counts per mouse across the aligned experiment timeline."""
+
+    data = visits.copy()
+    data["_value"] = data["nosepoke_event_count"].fillna(0).astype(float)
+    return _prepare_count_bins(data, time_col="analysis_experiment_elapsed_hours", bin_hours=bin_hours)
+
+
+def compute_experiment_lick_count_bins(
+    visits: pd.DataFrame,
+    *,
+    bin_hours: int,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Sum lick counts per mouse across the aligned experiment timeline."""
+
+    data = visits.copy()
+    data["_value"] = data["LickNumber"].fillna(0).astype(float)
+    return _prepare_count_bins(data, time_col="analysis_experiment_elapsed_hours", bin_hours=bin_hours)
 
 
 def compute_phase2_adaptation_bins(
@@ -314,15 +344,15 @@ def compute_phase2_adaptation_bins(
 ) -> dict[str, tuple[pd.DataFrame, pd.DataFrame]]:
     """Summarize phase-2 nose-poke adaptation with two complementary metrics."""
 
-    phase2 = visits.loc[visits["PhaseNumber"].eq(2)].copy()
+    phase2 = visits.loc[visits["AnalysisPhaseNumber"].eq(2)].copy()
     phase2["_value"] = 1.0
-    visit_bins = _prepare_count_bins(phase2, time_col="phase_elapsed_hours", bin_hours=bin_hours)
+    visit_bins = _prepare_count_bins(phase2, time_col="analysis_phase_elapsed_hours", bin_hours=bin_hours)
 
-    drink_visits = phase2.loc[phase2["phase2_drinking_visit"]].copy()
+    drink_visits = phase2.loc[phase2["has_nosepoke"] & phase2["visit_has_lick"]].copy()
     drink_visits["_value"] = 1.0
     lick_positive_bins = _prepare_count_bins(
         drink_visits,
-        time_col="phase_elapsed_hours",
+        time_col="analysis_phase_elapsed_hours",
         bin_hours=bin_hours,
     )
 
@@ -330,7 +360,7 @@ def compute_phase2_adaptation_bins(
     lick_counts["_value"] = lick_counts["LickNumber"].fillna(0).astype(float)
     lick_count_bins = _prepare_count_bins(
         lick_counts,
-        time_col="phase_elapsed_hours",
+        time_col="analysis_phase_elapsed_hours",
         bin_hours=bin_hours,
     )
 
@@ -348,17 +378,16 @@ def compute_place_learning_count_bins(
     *,
     phase_number: int,
     bin_hours: int,
-    strict: bool,
+    success_col: str,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Summarize correct-visit counts for phase 3 or phase 4."""
+    """Summarize selected place-learning event counts for phase 3 or phase 4."""
 
-    phase_visits = visits.loc[visits["PhaseNumber"].eq(phase_number)].copy()
-    success_col = "rewarded_place_visit" if strict else "correct_place_visit"
+    phase_visits = visits.loc[visits["AnalysisPhaseNumber"].eq(phase_number)].copy()
     phase_visits = phase_visits.loc[phase_visits[success_col]].copy()
     phase_visits["_value"] = 1.0
     return _prepare_count_bins(
         phase_visits,
-        time_col="phase_elapsed_hours",
+        time_col="analysis_phase_elapsed_hours",
         bin_hours=bin_hours,
     )
 
@@ -371,11 +400,11 @@ def compute_phase_visit_count_bins(
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Summarize all visit counts for a selected phase."""
 
-    phase_visits = visits.loc[visits["PhaseNumber"].eq(phase_number)].copy()
+    phase_visits = visits.loc[visits["AnalysisPhaseNumber"].eq(phase_number)].copy()
     phase_visits["_value"] = 1.0
     return _prepare_count_bins(
         phase_visits,
-        time_col="phase_elapsed_hours",
+        time_col="analysis_phase_elapsed_hours",
         bin_hours=bin_hours,
     )
 
@@ -385,18 +414,46 @@ def compute_place_learning_rate_bins(
     *,
     phase_number: int,
     bin_hours: int,
-    strict: bool,
+    success_col: str,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Summarize correct-visit rates for phase 3 or phase 4."""
+    """Summarize selected place-learning rates for phase 3 or phase 4."""
 
-    phase_visits = visits.loc[visits["PhaseNumber"].eq(phase_number)].copy()
-    success_col = "rewarded_place_visit" if strict else "correct_place_visit"
+    phase_visits = visits.loc[visits["AnalysisPhaseNumber"].eq(phase_number)].copy()
     return _prepare_rate_bins(
         phase_visits,
-        time_col="phase_elapsed_hours",
+        time_col="analysis_phase_elapsed_hours",
         bin_hours=bin_hours,
         success_col=success_col,
     )
+
+
+def compute_phase4_reversal_rate_bins(
+    visits: pd.DataFrame,
+    *,
+    bin_hours: int,
+) -> dict[str, tuple[pd.DataFrame, pd.DataFrame]]:
+    """Summarize place-reversal corner-choice rates for new, previous, and neutral corners."""
+
+    return {
+        "new_correct_corner": compute_place_learning_rate_bins(
+            visits,
+            phase_number=4,
+            bin_hours=bin_hours,
+            success_col="correct_corner_visit",
+        ),
+        "previous_correct_corner": compute_place_learning_rate_bins(
+            visits,
+            phase_number=4,
+            bin_hours=bin_hours,
+            success_col="previous_correct_corner_visit",
+        ),
+        "neutral_incorrect_corner": compute_place_learning_rate_bins(
+            visits,
+            phase_number=4,
+            bin_hours=bin_hours,
+            success_col="neutral_incorrect_corner_visit",
+        ),
+    }
 
 
 def compute_phase_activity_medians(
@@ -413,12 +470,15 @@ def compute_phase_activity_medians(
     """
 
     phase_visits = visits.copy()
-    phase_visits["hour_bin_start"] = np.floor(phase_visits["phase_elapsed_hours"] / float(hourly_bin_size))
+    phase_visits = phase_visits.loc[phase_visits["AnalysisPhaseNumber"].between(1, 4)].copy()
+    phase_visits["hour_bin_start"] = np.floor(
+        phase_visits["analysis_phase_elapsed_hours"] / float(hourly_bin_size)
+    )
     phase_visits["hour_bin_start"] = phase_visits["hour_bin_start"] * float(hourly_bin_size)
 
     counts = (
         phase_visits.groupby(
-            ["RunGroup", "PhaseNumber", "Group", "ET", "ETLabel", "hour_bin_start"],
+            ["RunGroup", "AnalysisPhaseNumber", "Group", "ET", "ETLabel", "hour_bin_start"],
             observed=True,
         )["VisitID"]
         .size()
@@ -426,17 +486,19 @@ def compute_phase_activity_medians(
     )
 
     phase_duration_hours = (
-        phase_visits.groupby(["RunGroup", "PhaseNumber"], observed=True)["phase_elapsed_hours"]
+        phase_visits.groupby(["RunGroup", "AnalysisPhaseNumber"], observed=True)["analysis_phase_elapsed_hours"]
         .max()
         .reset_index(name="phase_max_hour")
     )
-    mice = phase_visits.loc[:, ["RunGroup", "PhaseNumber", "Group", "ET", "ETLabel"]].drop_duplicates()
+    mice = phase_visits.loc[:, ["RunGroup", "AnalysisPhaseNumber", "Group", "ET", "ETLabel"]].drop_duplicates()
     complete_rows: list[pd.DataFrame] = []
     for _, duration_row in phase_duration_hours.iterrows():
         run_group = duration_row["RunGroup"]
-        phase_number = duration_row["PhaseNumber"]
+        phase_number = duration_row["AnalysisPhaseNumber"]
         max_hour = int(np.floor(float(duration_row["phase_max_hour"]) / float(hourly_bin_size)) * hourly_bin_size)
-        phase_mice = mice.loc[mice["RunGroup"].eq(run_group) & mice["PhaseNumber"].eq(phase_number)].copy()
+        phase_mice = mice.loc[
+            mice["RunGroup"].eq(run_group) & mice["AnalysisPhaseNumber"].eq(phase_number)
+        ].copy()
         hour_grid = pd.DataFrame({"hour_bin_start": np.arange(0, max_hour + hourly_bin_size, hourly_bin_size)})
         phase_mice["__key"] = 1
         hour_grid["__key"] = 1
@@ -444,16 +506,17 @@ def compute_phase_activity_medians(
     complete_index = pd.concat(complete_rows, ignore_index=True)
     complete_counts = complete_index.merge(
         counts,
-        on=["RunGroup", "PhaseNumber", "Group", "ET", "ETLabel", "hour_bin_start"],
+        on=["RunGroup", "AnalysisPhaseNumber", "Group", "ET", "ETLabel", "hour_bin_start"],
         how="left",
         validate="one_to_one",
     )
     complete_counts["visits_in_hour"] = complete_counts["visits_in_hour"].fillna(0.0)
 
     mouse_medians = (
-        complete_counts.groupby(["Group", "ET", "ETLabel", "PhaseNumber"], observed=True)["visits_in_hour"]
+        complete_counts.groupby(["Group", "ET", "ETLabel", "AnalysisPhaseNumber"], observed=True)["visits_in_hour"]
         .median()
         .reset_index(name="median_visits_per_hour")
+        .rename(columns={"AnalysisPhaseNumber": "PhaseNumber"})
     )
     return mouse_medians.sort_values(["Group", "PhaseNumber", "ET"]).reset_index(drop=True)
 
