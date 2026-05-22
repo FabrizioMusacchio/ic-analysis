@@ -3,3 +3,5 @@ private/*
 Matlab scripts/*
 __pycache__*
 results*
+archived/*
+.gitignore
