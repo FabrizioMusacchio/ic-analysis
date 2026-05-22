@@ -46,6 +46,7 @@ from intellicage_place_learning.metrics import (
     suggest_common_phase_limits,
 )
 from intellicage_place_learning.plotting import (
+    configure_plot_style,
     plot_experiment_dual_metric_bars,
     plot_experiment_overview,
     plot_experiment_overview_groups,
@@ -107,6 +108,7 @@ USER_GROUP_RENAMES = DEFAULT_GROUP_RENAMES.copy()
 USER_MOUSE_DAY_START_HOUR = DEFAULT_MOUSE_DAY_START_HOUR
 USER_AWAKE_DURATION_HOURS = DEFAULT_AWAKE_DURATION_HOURS
 USER_SCHEDULED_PHASE_START_HOURS = DEFAULT_SCHEDULED_PHASE_START_HOURS.copy()
+USER_BASE_FONT_SIZE = 10.0
 
 # %% FUNCTIONS
 def parse_numeric_mapping(raw_items: list[str]) -> dict[int, float]:
@@ -173,8 +175,15 @@ def phase_origin_clock_hour(mouse_day_start_hour: float, scheduled_phase_start_h
 def save_table(dataframe, output_path: Path) -> None:
     """Save a DataFrame as a tab-separated text file with parent creation."""
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    dataframe.to_csv(output_path, sep="\t", index=False)
+    target_path = output_path.parent / "csv" / output_path.name
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    dataframe.to_csv(target_path, sep="\t", index=False)
+
+
+def csv_output_path(output_path: Path) -> Path:
+    """Return the standardized CSV destination below a local `csv` subfolder."""
+
+    return output_path.parent / "csv" / output_path.name
 
 
 def apply_group_preferences(
@@ -254,9 +263,7 @@ def render_overview_plots(
             summary_bins,
             group_name=group_name,
             bin_hours=bin_hours,
-            output_path=output_dir
-            / "plots"
-            / f"overview_all_phases_visits_{sanitize_filename_part(group_name)}_{bin_hours}h.png",
+            output_path=output_dir / f"overview_all_phases_visits_{sanitize_filename_part(group_name)}_{bin_hours}h.png",
             phase_window_table=phase_window_table,
             phase_display_names=phase_display_names,
             spread_metric=spread_metric,
@@ -269,7 +276,7 @@ def render_overview_plots(
 
     plot_experiment_overview_groups(
         summary_bins,
-        output_path=output_dir / "plots" / f"overview_all_phases_visits_all_groups_{bin_hours}h.png",
+        output_path=output_dir / f"overview_all_phases_visits_all_groups_{bin_hours}h.png",
         phase_window_table=phase_window_table,
         phase_display_names=phase_display_names,
         spread_metric=spread_metric,
@@ -312,7 +319,7 @@ def render_experiment_metric_plots(
             summary_bins,
             group_name=group_name,
             bin_hours=bin_hours,
-            output_path=output_dir / "plots" / f"{file_stub}_{sanitize_filename_part(group_name)}_{bin_hours}h.png",
+            output_path=output_dir / f"{file_stub}_{sanitize_filename_part(group_name)}_{bin_hours}h.png",
             phase_window_table=phase_window_table,
             phase_display_names=phase_display_names,
             spread_metric=spread_metric,
@@ -328,7 +335,7 @@ def render_experiment_metric_plots(
 
     plot_experiment_overview_groups(
         summary_bins,
-        output_path=output_dir / "plots" / f"{file_stub}_all_groups_{bin_hours}h.png",
+        output_path=output_dir / f"{file_stub}_all_groups_{bin_hours}h.png",
         phase_window_table=phase_window_table,
         phase_display_names=phase_display_names,
         spread_metric=spread_metric,
@@ -391,9 +398,7 @@ def render_phase2_plots(
             secondary_summary,
             group_name=group_name,
             bin_hours=bin_hours,
-            output_path=output_dir
-            / "plots"
-            / f"phase2_visits_vs_{sanitize_filename_part(secondary_metric)}_{sanitize_filename_part(group_name)}_{bin_hours}h.png",
+            output_path=output_dir / f"phase2_visits_vs_{sanitize_filename_part(secondary_metric)}_{sanitize_filename_part(group_name)}_{bin_hours}h.png",
             secondary_label=secondary_label,
             phase_display_name=phase_display_names[2],
             plot_style=plot_style,
@@ -435,9 +440,7 @@ def render_phase2_control_plots(
             drinking_summary,
             group_name=group_name,
             bin_hours=bin_hours,
-            output_path=output_dir
-            / "plots"
-            / f"phase2_control_all_phases_visits_vs_drinking_visits_{sanitize_filename_part(group_name)}_{bin_hours}h.png",
+            output_path=output_dir / f"phase2_control_all_phases_visits_vs_drinking_visits_{sanitize_filename_part(group_name)}_{bin_hours}h.png",
             secondary_label="Drinking visits",
             phase_window_table=phase_window_table,
             phase_display_names=phase_display_names,
@@ -626,9 +629,7 @@ def render_phase_learning_plots(
                     phase_number=phase_number,
                     phase_display_name=phase_display_names[phase_number],
                     bin_hours=bin_hours,
-                    output_path=output_dir
-                    / "plots"
-                    / f"phase{phase_number}_{metric_spec['count_file_stub']}_{sanitize_filename_part(group_name)}_{bin_hours}h.png",
+                    output_path=output_dir / f"phase{phase_number}_{metric_spec['count_file_stub']}_{sanitize_filename_part(group_name)}_{bin_hours}h.png",
                     spread_metric=spread_metric,
                     title_label=metric_spec["count_title_label"],
                     ylabel=metric_spec["count_ylabel"],
@@ -645,9 +646,7 @@ def render_phase_learning_plots(
                     phase_number=phase_number,
                     phase_display_name=phase_display_names[phase_number],
                     bin_hours=bin_hours,
-                    output_path=output_dir
-                    / "plots"
-                    / f"phase{phase_number}_{metric_spec['file_stub']}_{sanitize_filename_part(group_name)}_{bin_hours}h.png",
+                    output_path=output_dir / f"phase{phase_number}_{metric_spec['file_stub']}_{sanitize_filename_part(group_name)}_{bin_hours}h.png",
                     spread_metric=spread_metric,
                     title_label=metric_spec["title_label"],
                     ylabel=metric_spec["ylabel"],
@@ -663,9 +662,7 @@ def render_phase_learning_plots(
                 metric_count_summary,
                 phase_display_name=phase_display_names[phase_number],
                 bin_hours=bin_hours,
-                output_path=output_dir
-                / "plots"
-                / f"phase{phase_number}_{metric_spec['count_file_stub']}_all_groups_{bin_hours}h.png",
+                output_path=output_dir / f"phase{phase_number}_{metric_spec['count_file_stub']}_all_groups_{bin_hours}h.png",
                 spread_metric=spread_metric,
                 x_end_hours=phase_end_hours.get(phase_number),
                 plot_style=plot_style,
@@ -680,9 +677,7 @@ def render_phase_learning_plots(
                 phase_number=phase_number,
                 phase_display_name=phase_display_names[phase_number],
                 bin_hours=bin_hours,
-                output_path=output_dir
-                / "plots"
-                / f"phase{phase_number}_{metric_spec['file_stub']}_all_groups_{bin_hours}h.png",
+                output_path=output_dir / f"phase{phase_number}_{metric_spec['file_stub']}_all_groups_{bin_hours}h.png",
                 spread_metric=spread_metric,
                 title_label=metric_spec["title_label"],
                 ylabel=metric_spec["ylabel"],
@@ -698,9 +693,7 @@ def render_phase_learning_plots(
             phase_visit_summary,
             phase_display_name=phase_display_names[phase_number],
             bin_hours=bin_hours,
-            output_path=output_dir
-            / "plots"
-            / f"phase{phase_number}_all_visit_counts_all_groups_{bin_hours}h.png",
+            output_path=output_dir / f"phase{phase_number}_all_visit_counts_all_groups_{bin_hours}h.png",
             spread_metric=spread_metric,
             x_end_hours=phase_end_hours.get(phase_number),
             plot_style=plot_style,
@@ -734,7 +727,7 @@ def render_phase_learning_plots(
                     component_summary,
                     output_dir / f"phase4_{component_name}_visits_absolute_group_summary_{bin_hours}h.tsv",
                 )
-                chance_level = 50.0 if component_name == "neutral_incorrect_corner" else 25.0
+                chance_level = 25.0
                 title_map = {
                     "new_correct_corner": "new correct-corner visit rate",
                     "previous_correct_corner": "previous correct-corner visit rate",
@@ -763,9 +756,7 @@ def render_phase_learning_plots(
                         phase_number=4,
                         phase_display_name=phase_display_names[4],
                         bin_hours=bin_hours,
-                        output_path=output_dir
-                        / "plots"
-                        / f"phase4_{component_name}_visit_rate_{sanitize_filename_part(group_name)}_{bin_hours}h.png",
+                        output_path=output_dir / f"phase4_{component_name}_visit_rate_{sanitize_filename_part(group_name)}_{bin_hours}h.png",
                         spread_metric=spread_metric,
                         title_label=title_map[component_name],
                         ylabel=ylabel_map[component_name],
@@ -783,9 +774,7 @@ def render_phase_learning_plots(
                         phase_number=4,
                         phase_display_name=phase_display_names[4],
                         bin_hours=bin_hours,
-                        output_path=output_dir
-                        / "plots"
-                        / f"phase4_{component_name}_visits_absolute_{sanitize_filename_part(group_name)}_{bin_hours}h.png",
+                        output_path=output_dir / f"phase4_{component_name}_visits_absolute_{sanitize_filename_part(group_name)}_{bin_hours}h.png",
                         spread_metric=spread_metric,
                         title_label=count_title_map[component_name],
                         ylabel=count_ylabel_map[component_name],
@@ -800,7 +789,7 @@ def render_phase_learning_plots(
                     phase_number=4,
                     phase_display_name=phase_display_names[4],
                     bin_hours=bin_hours,
-                    output_path=output_dir / "plots" / f"phase4_{component_name}_visit_rate_all_groups_{bin_hours}h.png",
+                    output_path=output_dir / f"phase4_{component_name}_visit_rate_all_groups_{bin_hours}h.png",
                     spread_metric=spread_metric,
                     title_label=title_map[component_name],
                     ylabel=ylabel_map[component_name],
@@ -815,7 +804,7 @@ def render_phase_learning_plots(
                     component_summary,
                     phase_display_name=phase_display_names[4],
                     bin_hours=bin_hours,
-                    output_path=output_dir / "plots" / f"phase4_{component_name}_visits_absolute_all_groups_{bin_hours}h.png",
+                    output_path=output_dir / f"phase4_{component_name}_visits_absolute_all_groups_{bin_hours}h.png",
                     spread_metric=spread_metric,
                     x_end_hours=phase_end_hours.get(4),
                     plot_style=plot_style,
@@ -831,9 +820,7 @@ def render_phase_learning_plots(
                     group_name=group_name,
                     phase_display_name=phase_display_names[4],
                     bin_hours=bin_hours,
-                    output_path=output_dir
-                    / "plots"
-                    / f"phase4_reversal_corner_components_{sanitize_filename_part(group_name)}_{bin_hours}h.png",
+                    output_path=output_dir / f"phase4_reversal_corner_components_{sanitize_filename_part(group_name)}_{bin_hours}h.png",
                     spread_metric=spread_metric,
                     x_end_hours=phase_group_end_hours.get((group_name, 4)),
                     plot_style=plot_style,
@@ -860,7 +847,7 @@ def render_phase_activity_plot(
         mouse_phase_activity,
         activity_stats,
         phase_display_names=phase_display_names,
-        output_path=output_dir / "plots" / "phase_activity_median_visits_per_hour_boxplot.png",
+        output_path=output_dir / "phase_activity_median_visits_per_hour_boxplot.png",
     )
 
 
@@ -908,9 +895,7 @@ def render_phase_segment_plots(
                 phase_display_name=phase_display_names[phase_number],
                 title_label=title_label,
                 ylabel=ylabel,
-                output_path=output_dir
-                / "plots"
-                / f"phase{phase_number}_{metric_stub}_awake_sleep_segment_rate_all_groups.png",
+                output_path=output_dir / f"phase{phase_number}_{metric_stub}_awake_sleep_segment_rate_all_groups.png",
                 spread_metric=spread_metric,
             )
 
@@ -982,9 +967,7 @@ def render_awake_day_violin_plots(
                     ylabel=ylabel,
                     pairwise_stats=pairwise,
                     chance_stats=chance,
-                    output_path=output_dir
-                    / "plots"
-                    / f"phase{phase_number}_{metric_stub}_awake_day{phase_day}_violin.png",
+                    output_path=output_dir / f"phase{phase_number}_{metric_stub}_awake_day{phase_day}_violin.png",
                 )
 
 
@@ -1003,7 +986,8 @@ def render_cumulative_role_plots(
 ) -> None:
     """Render cumulative and relative cumulative PL-to-PR corner-role plots."""
 
-    mouse_counts, summary = compute_role_cumulative_curves(visits, bin_hours=bin_hours)
+    pre_phase_hours = 24.0
+    mouse_counts, summary = compute_role_cumulative_curves(visits, bin_hours=bin_hours, pre_phase_hours=pre_phase_hours)
     if mouse_counts.empty or summary.empty:
         return
 
@@ -1012,11 +996,23 @@ def render_cumulative_role_plots(
 
     phase_window_table = pd.DataFrame(
         [
+            {"PhaseNumber": 2, "start_hours": -pre_phase_hours, "end_hours": 0.0},
             {"PhaseNumber": 3, "start_hours": 0.0, "end_hours": 72.0},
             {"PhaseNumber": 4, "start_hours": 72.0, "end_hours": 144.0},
         ]
     )
     origin_clock_hour = phase_origin_clock_hour(mouse_day_start_hour, scheduled_phase_start_hours[3])
+    aligned_x_start = -pre_phase_hours + (mouse_day_start_hour - origin_clock_hour)
+    pl_curve_mouse, _, pl_onset = compute_time_window_learning_curves(
+        visits,
+        phase_number=3,
+        success_col="correct_corner_visit",
+    )
+    pr_curve_mouse, _, pr_onset = compute_time_window_learning_curves(
+        visits,
+        phase_number=4,
+        success_col="correct_corner_visit",
+    )
     absolute_summary = summary.rename(
         columns={
             "mean_value_absolute": "mean_value",
@@ -1036,35 +1032,56 @@ def render_cumulative_role_plots(
     relative_summary["std_value_rate"] = relative_summary["std_value"] * 100.0
 
     for group_name in group_names:
+        onset_points: list[dict[str, float | str]] = []
+        pl_onset_group = pl_onset.loc[pl_onset["Group"].astype(str).eq(group_name), "onset_hours"].dropna()
+        pr_onset_group = pr_onset.loc[pr_onset["Group"].astype(str).eq(group_name), "onset_hours"].dropna()
+        if not pl_onset_group.empty:
+            onset_points.append(
+                {
+                    "corner_role": "PL target corner",
+                    "x_hours": float(pl_onset_group.median()),
+                }
+            )
+        if not pr_onset_group.empty:
+            onset_points.append(
+                {
+                    "corner_role": "PR target corner",
+                    "x_hours": 72.0 + float(pr_onset_group.median()),
+                }
+            )
         plot_cumulative_role_curves(
             absolute_summary,
             group_name=group_name,
-            output_path=output_dir / "plots" / f"pl_pr_cumulative_corner_roles_absolute_{sanitize_filename_part(group_name)}_{bin_hours}h.png",
-            title_label=f"cumulative corner-role visits from PL to PR ({bin_hours} h bins)",
+            output_path=output_dir / f"pl_pr_cumulative_corner_roles_absolute_{sanitize_filename_part(group_name)}_{bin_hours}h.png",
+            title_label=f"cumulative corner-role visits from late NPA to PR ({bin_hours} h bins)",
             ylabel="Cumulative visits per mouse",
             value_col="mean_value",
             spread_col=f"{spread_metric}_value",
             plot_style=plot_style,
             phase_window_table=phase_window_table,
-            phase_display_names={3: phase_display_names[3], 4: phase_display_names[4]},
+            phase_display_names={2: phase_display_names[2], 3: phase_display_names[3], 4: phase_display_names[4]},
             origin_clock_hour=origin_clock_hour,
             awake_start_clock_hour=mouse_day_start_hour,
             awake_end_clock_hour=awake_end_clock_hour,
+            x_start_hours=aligned_x_start,
+            onset_points=onset_points,
         )
         plot_cumulative_role_curves(
             relative_summary,
             group_name=group_name,
-            output_path=output_dir / "plots" / f"pl_pr_cumulative_corner_roles_relative_{sanitize_filename_part(group_name)}_{bin_hours}h.png",
-            title_label=f"relative cumulative corner-role visits from PL to PR ({bin_hours} h bins)",
+            output_path=output_dir / f"pl_pr_cumulative_corner_roles_relative_{sanitize_filename_part(group_name)}_{bin_hours}h.png",
+            title_label=f"relative cumulative corner-role visits from late NPA to PR ({bin_hours} h bins)",
             ylabel="Relative cumulative visits [%]",
             value_col="mean_value_rate",
             spread_col="sem_value_rate" if spread_metric == "sem" else "std_value_rate",
             plot_style=plot_style,
             phase_window_table=phase_window_table,
-            phase_display_names={3: phase_display_names[3], 4: phase_display_names[4]},
+            phase_display_names={2: phase_display_names[2], 3: phase_display_names[3], 4: phase_display_names[4]},
             origin_clock_hour=origin_clock_hour,
             awake_start_clock_hour=mouse_day_start_hour,
             awake_end_clock_hour=awake_end_clock_hour,
+            x_start_hours=aligned_x_start,
+            onset_points=onset_points,
         )
 
 
@@ -1120,7 +1137,7 @@ def render_experience_learning_plots(
                 phase_display_name=phase_display_names[phase_number],
                 title_label=title_label,
                 ylabel="Success probability [%]",
-                output_path=output_dir / "plots" / f"phase{phase_number}_{metric_stub}_experience_learning_all_groups.png",
+                output_path=output_dir / f"phase{phase_number}_{metric_stub}_experience_learning_all_groups.png",
                 spread_metric=spread_metric,
             )
             plot_onset_violin(
@@ -1129,7 +1146,8 @@ def render_experience_learning_plots(
                 phase_display_name=phase_display_names[phase_number],
                 title_label=f"{title_label} onset",
                 ylabel="Learning onset [visit number]",
-                output_path=output_dir / "plots" / f"phase{phase_number}_{metric_stub}_experience_learning_onset_violin.png",
+                output_path=output_dir / f"phase{phase_number}_{metric_stub}_experience_learning_onset_violin.png",
+                pairwise_stats=onset_pairwise,
             )
 
             time_curve_mouse, time_curve_summary, onset_hours = compute_time_window_learning_curves(
@@ -1169,7 +1187,8 @@ def render_experience_learning_plots(
                 phase_display_name=phase_display_names[phase_number],
                 title_label=f"{title_label} onset",
                 ylabel="Learning onset [hours]",
-                output_path=output_dir / "plots" / f"phase{phase_number}_{metric_stub}_clocktime_learning_onset_violin.png",
+                output_path=output_dir / f"phase{phase_number}_{metric_stub}_clocktime_learning_onset_violin.png",
+                pairwise_stats=onset_hour_pairwise,
             )
 
 
@@ -1188,6 +1207,7 @@ def run_analysis(
     mouse_day_start_hour: float = DEFAULT_MOUSE_DAY_START_HOUR,
     awake_duration_hours: float = DEFAULT_AWAKE_DURATION_HOURS,
     scheduled_phase_start_hours: dict[int, float] | None = None,
+    base_font_size: float = 10.0,
 ) -> Path:
     """Run the 4-month cohort pipeline from a normal Python function call.
 
@@ -1205,6 +1225,7 @@ def run_analysis(
     selected_group_renames = DEFAULT_GROUP_RENAMES.copy()
     if group_renames:
         selected_group_renames.update(group_renames)
+    configure_plot_style(font_size=base_font_size, font_family="Arial")
     awake_start_clock_hour, awake_end_clock_hour = active_period_bounds(
         mouse_day_start_hour,
         awake_duration_hours,
@@ -1239,6 +1260,7 @@ def run_analysis(
                     "phase2_plot_style",
                     "exclude_groups",
                     "group_rename_mapping",
+                    "base_font_size",
                 ],
                 "Value": [
                     mouse_day_start_hour,
@@ -1246,6 +1268,7 @@ def run_analysis(
                     phase2_plot_style,
                     ",".join(selected_excluded_groups) if selected_excluded_groups else "",
                     ";".join(f"{key}={value}" for key, value in selected_group_renames.items()),
+                    base_font_size,
                 ],
             }
         ),
@@ -1264,8 +1287,8 @@ def run_analysis(
     )
 
     filtered_visits = filter_visits_by_phase_limits(selected_visits, merged_phase_limits)
-    filtered_visits.to_csv(output_root / "merged_visits.tsv.gz", sep="\t", index=False, compression="gzip")
-    selected_nosepokes.to_csv(output_root / "merged_nosepokes.tsv.gz", sep="\t", index=False, compression="gzip")
+    filtered_visits.to_csv(csv_output_path(output_root / "merged_visits.tsv.gz"), sep="\t", index=False, compression="gzip")
+    selected_nosepokes.to_csv(csv_output_path(output_root / "merged_nosepokes.tsv.gz"), sep="\t", index=False, compression="gzip")
 
     group_names = ordered_group_names(filtered_visits)
     phase_window_table = build_analysis_phase_window_table(filtered_visits, merged_scheduled_phase_starts)
@@ -1396,6 +1419,7 @@ def main() -> None:
         mouse_day_start_hour=USER_MOUSE_DAY_START_HOUR,
         awake_duration_hours=USER_AWAKE_DURATION_HOURS,
         scheduled_phase_start_hours=USER_SCHEDULED_PHASE_START_HOURS,
+        base_font_size=USER_BASE_FONT_SIZE,
     )
 
 # %% ENTRY POINT

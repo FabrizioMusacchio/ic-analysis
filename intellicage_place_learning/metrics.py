@@ -14,6 +14,7 @@ import pandas as pd
 from scipy import stats
 from scipy.stats import binomtest
 from statsmodels.stats.multicomp import pairwise_tukeyhsd
+from statsmodels.stats.multitest import multipletests
 
 
 SpreadMetric = Literal["sem", "std"]
@@ -653,19 +654,12 @@ def compute_awake_day_rate_tables(
     return mouse_table, summary
 
 
-def _holm_adjust(p_values: list[float]) -> list[float]:
-    """Apply Holm correction to a sequence of p-values."""
+def _fdr_bh_adjust(p_values: list[float]) -> list[float]:
+    """Apply Benjamini-Hochberg FDR correction to a sequence of p-values."""
 
     if not p_values:
         return []
-    order = np.argsort(p_values)
-    adjusted = np.empty(len(p_values), dtype=float)
-    m = len(p_values)
-    running_max = 0.0
-    for rank, index in enumerate(order):
-        adj = (m - rank) * p_values[index]
-        running_max = max(running_max, adj)
-        adjusted[index] = min(1.0, running_max)
+    _, adjusted, _, _ = multipletests(p_values, alpha=0.05, method="fdr_bh")
     return adjusted.tolist()
 
 
@@ -749,14 +743,14 @@ def compute_group_day_violin_statistics(
                         )
                     )
                     pairs.append((left_group, right_group))
-            adjusted = _holm_adjust(raw_ps)
+            adjusted = _fdr_bh_adjust(raw_ps)
             for (left_group, right_group), p_value in zip(pairs, adjusted):
                 pairwise_rows.append(
                     {
                         "PhaseNumber": phase_number,
                         "Metric": metric_name,
                         "phase_day": int(phase_day),
-                        "test": "mannwhitney_holm",
+                        "test": "mannwhitney_fdr_bh",
                         "group1": left_group,
                         "group2": right_group,
                         "p_value": float(p_value),
@@ -804,10 +798,21 @@ def compute_role_cumulative_curves(
     visits: pd.DataFrame,
     *,
     bin_hours: int,
+    pre_phase_hours: float = 24.0,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Compute cumulative and relative cumulative corner-role visits across PL and PR."""
+    """Compute cumulative and relative cumulative corner-role visits across late NPA, PL, and PR."""
 
-    phase_visits = visits.loc[visits["AnalysisPhaseNumber"].isin([3, 4])].copy()
+    phase3_start = (
+        visits.loc[visits["AnalysisPhaseNumber"].eq(3), "analysis_phase_start_hours"].dropna().min()
+    )
+    if pd.isna(phase3_start):
+        return pd.DataFrame(), pd.DataFrame()
+
+    phase_visits = visits.copy()
+    phase_visits["combined_phase_elapsed_hours"] = phase_visits["analysis_experiment_elapsed_hours"] - float(phase3_start)
+    phase_visits = phase_visits.loc[
+        phase_visits["combined_phase_elapsed_hours"].between(-float(pre_phase_hours), 144.0, inclusive="both")
+    ].copy()
     if phase_visits.empty:
         return pd.DataFrame(), pd.DataFrame()
 
@@ -828,10 +833,6 @@ def compute_role_cumulative_curves(
 
     phase_visits["corner_role"] = phase_visits.apply(role_for_row, axis=1)
     phase_visits = phase_visits.loc[phase_visits["corner_role"].notna()].copy()
-    phase_visits["combined_phase_elapsed_hours"] = (
-        phase_visits["analysis_experiment_elapsed_hours"]
-        - phase_visits.loc[phase_visits["AnalysisPhaseNumber"].isin([3, 4]), "analysis_phase_start_hours"].min()
-    )
     phase_visits["bin_start_hours"] = np.floor(phase_visits["combined_phase_elapsed_hours"] / float(bin_hours)) * float(
         bin_hours
     )
@@ -852,7 +853,16 @@ def compute_role_cumulative_curves(
     mice = phase_visits.loc[:, ["Group", "ET", "ETLabel", "SEX"]].drop_duplicates().reset_index(drop=True)
     roles = pd.DataFrame({"corner_role": ["PL target corner", "PR target corner", "Neutral corner 1", "Neutral corner 2"]})
     max_time = float(phase_visits["combined_phase_elapsed_hours"].max())
-    all_bins = pd.DataFrame({"bin_start_hours": np.arange(0.0, np.floor(max_time / float(bin_hours)) * float(bin_hours) + float(bin_hours), float(bin_hours))})
+    min_time = float(np.floor(float(pre_phase_hours) / float(bin_hours)) * float(bin_hours) * -1.0)
+    all_bins = pd.DataFrame(
+        {
+            "bin_start_hours": np.arange(
+                min_time,
+                np.floor(max_time / float(bin_hours)) * float(bin_hours) + float(bin_hours),
+                float(bin_hours),
+            )
+        }
+    )
     mice["__key"] = 1
     roles["__key"] = 1
     all_bins["__key"] = 1
@@ -873,7 +883,16 @@ def compute_role_cumulative_curves(
     mouse_counts["bin_center_hours"] = mouse_counts["bin_start_hours"] + float(bin_hours) / 2.0
     mouse_counts = mouse_counts.sort_values(["Group", "ET", "corner_role", "bin_start_hours"]).reset_index(drop=True)
     mouse_counts["cumulative_value"] = mouse_counts.groupby(["Group", "ET", "corner_role"], observed=True)["value"].cumsum()
-    mouse_counts["cumulative_all_visits"] = mouse_counts.groupby(["Group", "ET"], observed=True)["all_visits"].cumsum()
+    total_counts = total_counts.sort_values(["Group", "ET", "bin_start_hours"]).reset_index(drop=True)
+    total_counts["cumulative_all_visits"] = total_counts.groupby(["Group", "ET"], observed=True)["all_visits"].cumsum()
+    mouse_counts = mouse_counts.drop(columns=["all_visits"]).merge(
+        total_counts,
+        on=["Group", "ET", "ETLabel", "SEX", "bin_start_hours"],
+        how="left",
+        validate="many_to_one",
+    )
+    mouse_counts["all_visits"] = mouse_counts["all_visits"].fillna(0.0)
+    mouse_counts["cumulative_all_visits"] = mouse_counts["cumulative_all_visits"].fillna(0.0)
     mouse_counts["relative_cumulative_value"] = mouse_counts["cumulative_value"] / mouse_counts["cumulative_all_visits"]
     mouse_counts["relative_cumulative_value"] = mouse_counts["relative_cumulative_value"].where(
         mouse_counts["cumulative_all_visits"].gt(0),
@@ -1148,14 +1167,14 @@ def compute_onset_group_statistics(
                     )
                 )
                 pairs.append((left_group, right_group))
-        adjusted = _holm_adjust(raw_ps)
+        adjusted = _fdr_bh_adjust(raw_ps)
         for (left_group, right_group), p_value in zip(pairs, adjusted):
             pairwise_rows.append(
                 {
                     "PhaseNumber": phase_number,
                     "Metric": metric_name,
                     "OnsetColumn": onset_col,
-                    "test": "mannwhitney_holm",
+                    "test": "mannwhitney_fdr_bh",
                     "group1": left_group,
                     "group2": right_group,
                     "p_value": float(p_value),

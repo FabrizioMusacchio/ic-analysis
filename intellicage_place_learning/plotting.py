@@ -20,6 +20,7 @@ _MPL_CONFIG_DIR = Path(tempfile.gettempdir()) / "matplotlib"
 _MPL_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 os.environ.setdefault("MPLCONFIGDIR", str(_MPL_CONFIG_DIR))
 
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 import numpy as np
@@ -46,6 +47,27 @@ ROLE_COLORS = {
     "Neutral corner 1": "#7f7f7f",
     "Neutral corner 2": "#b0b0b0",
 }
+
+
+def configure_plot_style(*, font_size: float = 10.0, font_family: str = "Arial") -> None:
+    """Apply global matplotlib defaults for IntelliCage poster figures."""
+
+    mpl.rcParams["font.family"] = "sans-serif"
+    mpl.rcParams["font.sans-serif"] = [font_family, "Arial", "Helvetica", "DejaVu Sans"]
+    mpl.rcParams["font.size"] = float(font_size)
+    mpl.rcParams["axes.titlesize"] = float(font_size) + 1.0
+    mpl.rcParams["axes.labelsize"] = float(font_size)
+    mpl.rcParams["xtick.labelsize"] = float(font_size)
+    mpl.rcParams["ytick.labelsize"] = float(font_size)
+    mpl.rcParams["legend.fontsize"] = float(font_size)
+    mpl.rcParams["axes.spines.top"] = False
+    mpl.rcParams["axes.spines.right"] = False
+
+
+def _font_size(offset: float = 0.0) -> float:
+    """Return a plot text size relative to the configured global base size."""
+
+    return float(mpl.rcParams["font.size"]) + float(offset)
 
 
 def _group_color(group_name: str) -> str:
@@ -119,7 +141,7 @@ def _add_awake_sleep_background(
                 "awake",
                 ha="center",
                 va="top",
-                fontsize=9,
+                fontsize=_font_size(),
                 color="#4d4d4d",
             )
 
@@ -143,7 +165,7 @@ def _add_awake_sleep_background(
                     "sleep",
                     ha="center",
                     va="top",
-                    fontsize=9,
+                    fontsize=_font_size(),
                     color="#4d4d4d",
                 )
         current_left = max(current_left, min(awake_right, x_end))
@@ -164,7 +186,7 @@ def _add_awake_sleep_background(
                 "sleep",
                 ha="center",
                 va="top",
-                fontsize=9,
+                fontsize=_font_size(),
                 color="#4d4d4d",
             )
 
@@ -194,7 +216,7 @@ def _add_day_annotations(
                     f"Day {starting_day + day_index}",
                     ha="center",
                     va="center",
-                    fontsize=9,
+                    fontsize=_font_size(),
                     fontweight="bold",
                     color="#1f1f1f",
                     transform=ax.get_xaxis_transform(),
@@ -233,7 +255,7 @@ def _add_phase_band(
             phase_display_names.get(phase_number, f"Phase {phase_number}"),
             ha="center",
             va="center",
-            fontsize=9,
+            fontsize=_font_size(),
             fontweight="bold",
             color="#1f1f1f",
             transform=ax.get_xaxis_transform(),
@@ -268,7 +290,7 @@ def _add_single_phase_band(
         label,
         ha="center",
         va="center",
-        fontsize=9,
+        fontsize=_font_size(),
         fontweight="bold",
         color="#1f1f1f",
         transform=ax.get_xaxis_transform(),
@@ -1329,10 +1351,12 @@ def plot_group_day_violin(
     ].copy()
     y_base = 102.0
     y_step = 5.0
+    y_limit = 120.0
     for pair_index, (_, row) in enumerate(significant_pairs.iterrows()):
         left = group_order.index(str(row["group1"])) + 1
         right = group_order.index(str(row["group2"])) + 1
         line_y = y_base + pair_index * y_step
+        y_limit = max(y_limit, line_y + 6.0)
         ax.plot([left, left, right, right], [line_y - 0.8, line_y, line_y, line_y - 0.8], color="#444444", linewidth=1.0)
         ax.text(
             (left + right) / 2.0,
@@ -1340,7 +1364,7 @@ def plot_group_day_violin(
             f"p={float(row['p_value']):.3g}",
             ha="center",
             va="bottom",
-            fontsize=8,
+            fontsize=_font_size(-2.0),
             color="#444444",
         )
 
@@ -1349,8 +1373,9 @@ def plot_group_day_violin(
             chance_stats["phase_day"].eq(phase_day) & chance_stats["Group"].astype(str).eq(group_name)
         ]
         if not chance_row.empty and float(chance_row["p_value"].iloc[0]) < 0.05:
-            ax.text(position, 117.0, "*", ha="center", va="center", fontsize=16, color="#222222")
+            ax.text(position, 117.0, "*", ha="center", va="center", fontsize=_font_size(6.0), color="#222222")
 
+    ax.set_ylim(0, y_limit)
     fig.tight_layout()
     fig.savefig(output_path, dpi=300)
     plt.close(fig)
@@ -1371,6 +1396,8 @@ def plot_cumulative_role_curves(
     origin_clock_hour: float,
     awake_start_clock_hour: float,
     awake_end_clock_hour: float,
+    x_start_hours: float | None = None,
+    onset_points: list[dict[str, float | str]] | None = None,
 ) -> None:
     """Plot cumulative role-based corner trajectories for one pathology group."""
 
@@ -1380,7 +1407,7 @@ def plot_cumulative_role_curves(
 
     _prepare_output_path(output_path)
     fig, ax = plt.subplots(figsize=(15, 6.5))
-    x_start = _phase_plot_x_start(origin_clock_hour, awake_start_clock_hour)
+    x_start = _phase_plot_x_start(origin_clock_hour, awake_start_clock_hour) if x_start_hours is None else float(x_start_hours)
     max_hour = float(group_summary["bin_end_hours"].max())
     ax.set_xlim(x_start, max_hour)
 
@@ -1413,6 +1440,25 @@ def plot_cumulative_role_curves(
             plot_style=plot_style,
             linewidth=2.4,
         )
+
+    if onset_points:
+        for point in onset_points:
+            role_name = str(point["corner_role"])
+            x_value = float(point["x_hours"])
+            role_summary = group_summary.loc[group_summary["corner_role"].astype(str).eq(role_name)].copy()
+            if role_summary.empty:
+                continue
+            nearest_index = (role_summary["bin_center_hours"] - x_value).abs().idxmin()
+            y_value = float(role_summary.loc[nearest_index, value_col])
+            ax.scatter(
+                [x_value],
+                [y_value],
+                color="#c1121f",
+                edgecolor="white",
+                linewidth=0.7,
+                s=48,
+                zorder=6,
+            )
 
     ax.set_title(f"{group_name}: {title_label}")
     ax.set_xlabel("Hours since start of PL")
@@ -1482,6 +1528,7 @@ def plot_onset_violin(
     title_label: str,
     ylabel: str,
     output_path: Path,
+    pairwise_stats: pd.DataFrame | None = None,
 ) -> None:
     """Plot onset distributions per group as violins with point overlays."""
 
@@ -1528,6 +1575,31 @@ def plot_onset_violin(
     ax.set_title(f"{title_label} ({phase_display_name})")
     ax.set_ylabel(ylabel)
     ax.grid(axis="y", alpha=0.25)
+
+    if pairwise_stats is not None and not pairwise_stats.empty:
+        significant_pairs = pairwise_stats.loc[pairwise_stats["p_value"].lt(0.05)].copy()
+        if not significant_pairs.empty:
+            y_max = float(plot_data[onset_col].max())
+            y_min = float(plot_data[onset_col].min())
+            data_span = max(1.0, y_max - y_min)
+            base_y = y_max + data_span * 0.12
+            step_y = data_span * 0.10
+            for pair_index, (_, row) in enumerate(significant_pairs.iterrows()):
+                left = group_order.index(str(row["group1"])) + 1
+                right = group_order.index(str(row["group2"])) + 1
+                line_y = base_y + pair_index * step_y
+                ax.plot([left, left, right, right], [line_y - 0.03 * data_span, line_y, line_y, line_y - 0.03 * data_span], color="#444444", linewidth=1.0)
+                ax.text(
+                    (left + right) / 2.0,
+                    line_y + 0.02 * data_span,
+                    f"p={float(row['p_value']):.3g}",
+                    ha="center",
+                    va="bottom",
+                    fontsize=_font_size(-2.0),
+                    color="#444444",
+                )
+            ax.set_ylim(bottom=ax.get_ylim()[0], top=base_y + max(1, len(significant_pairs)) * step_y + data_span * 0.08)
+
     fig.tight_layout()
     fig.savefig(output_path, dpi=300)
     plt.close(fig)
@@ -1621,7 +1693,7 @@ def plot_phase_activity_boxplot(
         position = positions.get((group_name, phase_number))
         if position is None:
             continue
-        ax.text(position, y_min + 0.6, label, color="red", fontsize=13, ha="center", va="bottom", fontweight="bold")
+        ax.text(position, y_min + 0.6, label, color="red", fontsize=_font_size(3.0), ha="center", va="bottom", fontweight="bold")
 
     xticks: list[float] = []
     xlabels: list[str] = []
