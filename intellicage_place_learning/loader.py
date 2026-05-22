@@ -12,7 +12,7 @@ The returned visit table contains both the old MATLAB-compatible metric
 correct place visit with at least one associated nose-poke and at least one
 lick.
 """
-
+# %% IMPORTS
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -21,7 +21,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-
+# %% CONSTANTS
 PHASE_NAMES: tuple[str, ...] = ("Phase1", "Phase2", "Phase3", "Phase4")
 PREFERRED_GROUP_ORDER: tuple[str, ...] = (
     "WT",
@@ -37,7 +37,7 @@ PHASE_DISPLAY_LABELS: dict[int, str] = {
     4: "Phase4",
 }
 
-
+# %% DATA CLASSES
 @dataclass(frozen=True)
 class CohortData:
     """Container that keeps the loaded cohort tables together."""
@@ -47,14 +47,13 @@ class CohortData:
     nosepokes: pd.DataFrame
     phase_manifest: pd.DataFrame
 
-
+# %% HELPER FUNCTIONS
 def _ordered_group_categories(groups: pd.Series) -> list[str]:
     """Return a stable categorical order for pathology groups."""
 
     present = [group for group in PREFERRED_GROUP_ORDER if group in set(groups.dropna())]
     extras = sorted(set(groups.dropna()) - set(present))
     return present + extras
-
 
 def read_mice_metadata(mice_path: Path, run_group: str) -> pd.DataFrame:
     """Read one `Mice.txt` file and normalize its metadata columns."""
@@ -82,7 +81,6 @@ def read_mice_metadata(mice_path: Path, run_group: str) -> pd.DataFrame:
     metadata["Group"] = metadata["Group"].astype("string")
     return metadata
 
-
 def read_visits_file(visits_path: Path, run_group: str, phase_name: str) -> pd.DataFrame:
     """Read one IntelliCage `Visits.txt` file into a typed DataFrame."""
 
@@ -98,7 +96,6 @@ def read_visits_file(visits_path: Path, run_group: str, phase_name: str) -> pd.D
     visits["visit_has_lick"] = visits["LickNumber"].fillna(0).gt(0) | visits["LickDuration"].fillna(0).gt(0)
     return visits
 
-
 def read_nosepokes_file(nosepokes_path: Path, run_group: str, phase_name: str) -> pd.DataFrame:
     """Read one IntelliCage `Nosepokes.txt` file into a typed DataFrame."""
 
@@ -112,7 +109,6 @@ def read_nosepokes_file(nosepokes_path: Path, run_group: str, phase_name: str) -
     if "LickStartTime" in nosepokes.columns:
         nosepokes["LickStartTime"] = pd.to_datetime(nosepokes["LickStartTime"], errors="coerce")
     return nosepokes
-
 
 def summarize_nosepokes_by_visit(nosepokes: pd.DataFrame) -> pd.DataFrame:
     """Aggregate raw nose-poke rows to one row per visit."""
@@ -132,7 +128,6 @@ def summarize_nosepokes_by_visit(nosepokes: pd.DataFrame) -> pd.DataFrame:
     summary["has_nosepoke_lick"] = summary["nosepoke_lick_count"].gt(0) | summary["nosepoke_lick_duration"].gt(0)
     return summary
 
-
 def _build_phase_manifest(visits: pd.DataFrame) -> pd.DataFrame:
     """Create a manifest with the temporal extent of every phase."""
 
@@ -148,7 +143,6 @@ def _build_phase_manifest(visits: pd.DataFrame) -> pd.DataFrame:
         .sort_values(["RunGroup", "PhaseNumber"])
         .reset_index(drop=True)
     )
-
 
 def _attach_time_reference_columns(visits: pd.DataFrame, phase_manifest: pd.DataFrame) -> pd.DataFrame:
     """Add experiment-relative and phase-relative timing columns."""
@@ -176,7 +170,6 @@ def _attach_time_reference_columns(visits: pd.DataFrame, phase_manifest: pd.Data
     enriched["experiment_day"] = np.floor(enriched["experiment_elapsed_hours"] / 24.0).astype(int)
     enriched["phase_day"] = np.floor(enriched["phase_elapsed_hours"] / 24.0).astype(int) + 1
     return enriched
-
 
 def attach_analysis_time_columns(
     visits: pd.DataFrame,
@@ -294,7 +287,6 @@ def attach_analysis_time_columns(
     )
     return enriched
 
-
 def load_cohort_data(dataset_root: Path | str) -> CohortData:
     """Load and harmonize one IntelliCage cohort directory."""
 
@@ -406,3 +398,4 @@ def load_cohort_data(dataset_root: Path | str) -> CohortData:
         nosepokes=nosepokes,
         phase_manifest=phase_manifest,
     )
+# %% END

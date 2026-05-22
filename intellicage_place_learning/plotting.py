@@ -9,7 +9,7 @@ implementation. The main design choices are:
 - phase and day annotations
 - awake/sleep background shading
 """
-
+# %% IMPORTS
 from __future__ import annotations
 
 import os
@@ -27,7 +27,7 @@ from matplotlib.patches import Patch
 import numpy as np
 import pandas as pd
 
-
+# %% CONSTANTS
 GROUP_COLORS = {
     "WT": "#264653",
     "tdTomato": "#6c757d",
@@ -59,14 +59,13 @@ ONSET_FIGSIZE_CM = (6.2, 7.0)
 ACTIVITY_FIGSIZE_CM = (8.8, 8.1)
 WIDE_GROUP_FIGSIZE_CM = (15.4, 9.0)
 
-
+# %% FUNCTIONS
 def set_group_colors(color_mapping: dict[str, str] | None) -> None:
     """Update the global pathology-group color mapping used across all plots."""
 
     if not color_mapping:
         return
     GROUP_COLORS.update({str(key): str(value) for key, value in color_mapping.items()})
-
 
 def configure_plot_style(*, font_size: float = 10.0, font_family: str = "Arial") -> None:
     """Apply global matplotlib defaults for IntelliCage poster figures."""
@@ -82,18 +81,15 @@ def configure_plot_style(*, font_size: float = 10.0, font_family: str = "Arial")
     mpl.rcParams["axes.spines.top"] = False
     mpl.rcParams["axes.spines.right"] = False
 
-
 def _font_size(offset: float = 0.0) -> float:
     """Return a plot text size relative to the configured global base size."""
 
     return float(mpl.rcParams["font.size"]) + float(offset)
 
-
 def _figsize_cm(width_cm: float, height_cm: float) -> tuple[float, float]:
     """Convert a figure size from centimeters to matplotlib inches."""
 
     return (float(width_cm) / CM_TO_INCH, float(height_cm) / CM_TO_INCH)
-
 
 def _title_start(value: str) -> str:
     """Upper-case the first character of a title fragment when possible."""
@@ -101,7 +97,6 @@ def _title_start(value: str) -> str:
     if not value:
         return value
     return value[0].upper() + value[1:]
-
 
 def _wrap_axis_label(value: str, *, width: int = 28) -> str:
     """Insert simple line breaks into long axis labels for narrow figures."""
@@ -115,7 +110,6 @@ def _wrap_axis_label(value: str, *, width: int = 28) -> str:
     wrapped = textwrap.wrap(value, width=width, break_long_words=False, break_on_hyphens=False)
     return "\n".join(wrapped) if wrapped else value
 
-
 def _wrap_title(value: str, *, width: int = 38) -> str:
     """Wrap long titles across multiple lines without breaking words."""
 
@@ -124,18 +118,15 @@ def _wrap_title(value: str, *, width: int = 38) -> str:
     wrapped = textwrap.wrap(value, width=width, break_long_words=False, break_on_hyphens=False)
     return "\n".join(wrapped) if wrapped else value
 
-
 def _count_axis_upper(y_max: float) -> float:
     """Reserve headroom so data do not intrude into annotation bands."""
 
     return max(5.0, float(y_max) * 1.35 + 0.5)
 
-
 def _group_color(group_name: str) -> str:
     """Return a stable display color for one pathology group."""
 
     return GROUP_COLORS.get(group_name, "#457b9d")
-
 
 def _mouse_trace_colors(mouse_labels: list[str]) -> dict[str, tuple[float, float, float, float]]:
     """Return stable distinct colors for individual mouse traces within one panel."""
@@ -149,12 +140,10 @@ def _mouse_trace_colors(mouse_labels: list[str]) -> dict[str, tuple[float, float
         for index, label in enumerate(mouse_labels)
     }
 
-
 def _prepare_output_path(output_path: Path) -> None:
     """Create the parent directory for one output file if necessary."""
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-
 
 def _save_figure(fig: plt.Figure, output_path: Path) -> None:
     """Save each figure as both PNG and PDF with tight bounding boxes."""
@@ -167,7 +156,6 @@ def _save_figure(fig: plt.Figure, output_path: Path) -> None:
     fig.savefig(pdf_output_path, bbox_inches="tight")
     plt.close(fig)
 
-
 def sanitize_filename_part(value: str) -> str:
     """Convert a label into a filesystem-friendly filename part."""
 
@@ -179,12 +167,10 @@ def sanitize_filename_part(value: str) -> str:
         .replace("%", "pct")
     )
 
-
 def _spread_column(spread_metric: str) -> str:
     """Return the summary column name for the selected spread metric."""
 
     return "std_value" if spread_metric == "std" else "sem_value"
-
 
 def _add_awake_sleep_background(
     ax: plt.Axes,
@@ -282,7 +268,6 @@ def _add_awake_sleep_background(
                 transform=ax.get_xaxis_transform(),
             )
 
-
 def _add_day_annotations(
     ax: plt.Axes,
     *,
@@ -315,7 +300,6 @@ def _add_day_annotations(
                 )
         day_index += 1
         day_start += 24.0
-
 
 def _add_phase_band(
     ax: plt.Axes,
@@ -353,7 +337,6 @@ def _add_phase_band(
             transform=ax.get_xaxis_transform(),
         )
 
-
 def _add_single_phase_band(
     ax: plt.Axes,
     *,
@@ -387,7 +370,6 @@ def _add_single_phase_band(
         color="#1f1f1f",
         transform=ax.get_xaxis_transform(),
     )
-
 
 def _add_segment_annotations(
     ax: plt.Axes,
@@ -448,7 +430,6 @@ def _add_segment_annotations(
         end_hours=float(max_segment),
     )
 
-
 def _draw_step_with_band(
     ax: plt.Axes,
     x_starts: pd.Series,
@@ -474,7 +455,6 @@ def _draw_step_with_band(
     ax.fill_between(x_step, lower, upper, step="post", color=color, alpha=0.18, linewidth=0, zorder=3)
     ax.step(x_step, y_step, where="post", color=color, linewidth=linewidth, label=label, zorder=4)
 
-
 def _draw_line_with_band(
     ax: plt.Axes,
     x_centers: pd.Series,
@@ -492,7 +472,6 @@ def _draw_line_with_band(
     spread = y_spread.to_numpy(dtype=float)
     ax.fill_between(x, y - spread, y + spread, color=color, alpha=0.18, linewidth=0, zorder=3)
     ax.plot(x, y, color=color, linewidth=linewidth, label=label, zorder=4)
-
 
 def _draw_trace_with_band(
     ax: plt.Axes,
@@ -528,7 +507,6 @@ def _draw_trace_with_band(
             label=label,
             linewidth=linewidth,
         )
-
 
 def _draw_individual_trace(
     ax: plt.Axes,
@@ -567,14 +545,12 @@ def _draw_individual_trace(
             zorder=2,
         )
 
-
 def _format_rate_axis(ax: plt.Axes, *, ylabel: str = "Visit rate [%]") -> None:
     """Format a rate axis in percent."""
 
     ax.set_ylim(0, 130)
     ax.set_ylabel(_wrap_axis_label(ylabel))
     ax.set_yticks(np.arange(0, 110, 10))
-
 
 def _phase_plot_x_start(origin_clock_hour: float, awake_start_clock_hour: float) -> float:
     """Return the relative x-axis start so day boundaries remain mouse-day aligned."""
@@ -583,7 +559,6 @@ def _phase_plot_x_start(origin_clock_hour: float, awake_start_clock_hour: float)
     if raw_offset > 0:
         raw_offset -= 24.0
     return float(raw_offset)
-
 
 def _place_legend(
     ax: plt.Axes,
@@ -605,7 +580,6 @@ def _place_legend(
         borderaxespad=0.0,
     )
 
-
 def _place_external_legend(
     ax: plt.Axes,
     *,
@@ -624,7 +598,6 @@ def _place_external_legend(
         borderaxespad=0.0,
     )
 
-
 def _p_to_star_label(p_value: float) -> str:
     """Convert a p-value to the legacy star notation."""
 
@@ -637,7 +610,6 @@ def _p_to_star_label(p_value: float) -> str:
     if p_value < 0.05:
         return "*"
     return "n.s."
-
 
 def plot_experiment_overview(
     mouse_bins: pd.DataFrame,
@@ -724,7 +696,6 @@ def plot_experiment_overview(
                 text.set_visible(False)
     _save_figure(fig, output_path)
 
-
 def plot_experiment_overview_groups(
     summary_bins: pd.DataFrame,
     *,
@@ -783,7 +754,6 @@ def plot_experiment_overview_groups(
     ax.grid(axis="y", alpha=0.25)
     ax.legend(frameon=False, ncol=1, loc="upper left", bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0)
     _save_figure(fig, output_path)
-
 
 def plot_phase2_adaptation(
     primary_summary: pd.DataFrame,
@@ -887,7 +857,6 @@ def plot_phase2_adaptation(
     _place_external_legend(ax, ncol=1)
     _save_figure(fig, output_path)
 
-
 def plot_phase_learning_counts(
     mouse_bins: pd.DataFrame,
     summary_bins: pd.DataFrame,
@@ -973,7 +942,6 @@ def plot_phase_learning_counts(
     ax.grid(axis="y", alpha=0.25)
     _place_external_legend(ax, ncol=1)
     _save_figure(fig, output_path)
-
 
 def plot_phase_learning_rate(
     mouse_bins: pd.DataFrame,
@@ -1071,7 +1039,6 @@ def plot_phase_learning_rate(
     _place_external_legend(ax, ncol=1)
     _save_figure(fig, output_path)
 
-
 def plot_phase_learning_rate_groups(
     summary_bins: pd.DataFrame,
     *,
@@ -1148,7 +1115,6 @@ def plot_phase_learning_rate_groups(
     ax.legend(frameon=False, ncol=1, loc="upper left", bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0)
     _save_figure(fig, output_path)
 
-
 def plot_phase_learning_counts_groups(
     summary_bins: pd.DataFrame,
     *,
@@ -1213,7 +1179,6 @@ def plot_phase_learning_counts_groups(
     ax.grid(axis="y", alpha=0.25)
     ax.legend(frameon=False, ncol=1, loc="upper left", bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0)
     _save_figure(fig, output_path)
-
 
 def plot_experiment_dual_metric_bars(
     primary_summary: pd.DataFrame,
@@ -1316,7 +1281,6 @@ def plot_experiment_dual_metric_bars(
     _place_legend(ax, y_anchor=0.76)
     _save_figure(fig, output_path)
 
-
 def plot_phase4_reversal_components(
     summary_by_component: dict[str, pd.DataFrame],
     *,
@@ -1388,7 +1352,6 @@ def plot_phase4_reversal_components(
     _place_external_legend(ax, ncol=1)
     _save_figure(fig, output_path)
 
-
 def plot_phase_segment_rate_groups(
     summary_bins: pd.DataFrame,
     *,
@@ -1457,7 +1420,6 @@ def plot_phase_segment_rate_groups(
     ax.grid(axis="y", alpha=0.25)
     _place_external_legend(ax, ncol=1)
     _save_figure(fig, output_path)
-
 
 def plot_group_day_violin(
     mouse_day_rates: pd.DataFrame,
@@ -1583,7 +1545,6 @@ def plot_group_day_violin(
     ax.set_ylim(0, y_limit)
     _save_figure(fig, output_path)
 
-
 def plot_cumulative_role_curves(
     summary_bins: pd.DataFrame,
     *,
@@ -1672,7 +1633,6 @@ def plot_cumulative_role_curves(
     _place_external_legend(ax, ncol=1)
     _save_figure(fig, output_path)
 
-
 def plot_visit_learning_curve_groups(
     summary_bins: pd.DataFrame,
     *,
@@ -1720,7 +1680,6 @@ def plot_visit_learning_curve_groups(
     ax.grid(axis="y", alpha=0.25)
     ax.legend(frameon=False, ncol=1, loc="upper left", bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0)
     _save_figure(fig, output_path)
-
 
 def plot_onset_violin(
     onset_table: pd.DataFrame,
@@ -1828,7 +1787,6 @@ def plot_onset_violin(
             ax.set_ylim(bottom=ax.get_ylim()[0], top=base_y + max(1, len(significant_pairs)) * step_y + data_span * 0.08)
 
     _save_figure(fig, output_path)
-
 
 def plot_phase_activity_boxplot(
     mouse_phase_activity: pd.DataFrame,
@@ -1946,3 +1904,4 @@ def plot_phase_activity_boxplot(
     )
     ax.legend(handles=[*legend_handles, median_handle, outlier_handle], frameon=False, loc="upper left")
     _save_figure(fig, output_path)
+# %% END

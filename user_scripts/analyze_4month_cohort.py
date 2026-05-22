@@ -67,8 +67,7 @@ from intellicage_place_learning.plotting import (
     set_group_colors,
 )
 # %% PARAMETERS AND DEFAULTS
-
-DEFAULT_DATASET_ROOT = PROJECT_ROOT / "Data IntelliCage" / "BioMedX_4MonthCohort_2019"
+defAULT_DATASET_ROOT = PROJECT_ROOT / "Data IntelliCage" / "BioMedX_4MonthCohort_2019"
 DEFAULT_PHASE_DISPLAY_NAMES = {
     1: "Free Hab",
     2: "NPA",
@@ -133,7 +132,6 @@ def parse_numeric_mapping(raw_items: list[str]) -> dict[int, float]:
         limits[int(phase_text)] = float(hour_text)
     return limits
 
-
 def parse_group_rename_mapping(raw_items: list[str] | None) -> dict[str, str]:
     """Parse `old=new` group-renaming entries into a string dictionary."""
 
@@ -147,14 +145,12 @@ def parse_group_rename_mapping(raw_items: list[str] | None) -> dict[str, str]:
         mapping[old_name] = new_name
     return mapping
 
-
 def resolve_output_root(dataset_root: Path, results_subdir: Path) -> Path:
     """Resolve a results directory that is always relative to the dataset root."""
 
     if results_subdir.is_absolute():
         raise ValueError("`--results-subdir` must be a relative path below the dataset root.")
     return dataset_root / results_subdir
-
 
 def ordered_group_names(visits) -> list[str]:
     """Extract pathology-group names in their categorical display order."""
@@ -163,7 +159,6 @@ def ordered_group_names(visits) -> list[str]:
     if categories is not None:
         return [str(category) for category in categories if str(category) != "nan"]
     return sorted(visits["Group"].dropna().astype(str).unique())
-
 
 def active_period_bounds(mouse_day_start_hour: float, awake_duration_hours: float) -> tuple[float, float]:
     """Return the absolute clock bounds of the configured awake period."""
@@ -175,7 +170,6 @@ def active_period_bounds(mouse_day_start_hour: float, awake_duration_hours: floa
             "Please choose `mouse_day_start_hour + awake_duration_hours <= 24`."
         )
     return mouse_day_start_hour, awake_end_clock_hour
-
 
 def resolved_group_colors(
     *,
@@ -195,12 +189,10 @@ def resolved_group_colors(
             resolved.setdefault(str(key), str(value))
     return resolved
 
-
 def phase_origin_clock_hour(mouse_day_start_hour: float, scheduled_phase_start_hour: float) -> float:
     """Return the wall-clock hour that corresponds to phase-relative time zero."""
 
     return float((mouse_day_start_hour + (scheduled_phase_start_hour % 24.0)) % 24.0)
-
 
 def save_table(dataframe, output_path: Path) -> None:
     """Save a DataFrame as a tab-separated text file with parent creation."""
@@ -209,12 +201,10 @@ def save_table(dataframe, output_path: Path) -> None:
     target_path.parent.mkdir(parents=True, exist_ok=True)
     dataframe.to_csv(target_path, sep="\t", index=False)
 
-
 def csv_output_path(output_path: Path) -> Path:
     """Return the standardized CSV destination below a local `csv` subfolder."""
 
     return output_path.parent / "csv" / output_path.name
-
 
 def apply_group_preferences(
     visits: pd.DataFrame,
@@ -263,7 +253,6 @@ def apply_group_preferences(
         validate="many_to_one",
     )
     return visits, metadata, nosepokes
-
 
 def render_overview_plots(
     visits,
@@ -315,7 +304,6 @@ def render_overview_plots(
         awake_start_clock_hour=mouse_day_start_hour,
         awake_end_clock_hour=awake_end_clock_hour,
     )
-
 
 def render_experiment_metric_plots(
     mouse_bins,
@@ -377,7 +365,6 @@ def render_experiment_metric_plots(
         awake_end_clock_hour=awake_end_clock_hour,
     )
 
-
 def render_phase2_plots(
     visits,
     output_dir: Path,
@@ -438,7 +425,6 @@ def render_phase2_plots(
             awake_start_clock_hour=mouse_day_start_hour,
             awake_end_clock_hour=awake_end_clock_hour,
         )
-
 
 def render_phase2_control_plots(
     visits,
@@ -515,7 +501,6 @@ def render_phase2_control_plots(
         mouse_day_start_hour=mouse_day_start_hour,
         awake_end_clock_hour=awake_end_clock_hour,
     )
-
 
 def render_phase_learning_plots(
     visits,
@@ -859,7 +844,6 @@ def render_phase_learning_plots(
                     awake_end_clock_hour=awake_end_clock_hour,
                 )
 
-
 def render_phase_activity_plot(
     visits,
     output_dir: Path,
@@ -879,7 +863,6 @@ def render_phase_activity_plot(
         phase_display_names=phase_display_names,
         output_path=output_dir / "phase_activity_median_visits_per_hour_boxplot.png",
     )
-
 
 def render_phase_segment_plots(
     visits,
@@ -928,7 +911,6 @@ def render_phase_segment_plots(
                 output_path=output_dir / f"phase{phase_number}_{metric_stub}_awake_sleep_segment_rate_all_groups.png",
                 spread_metric=spread_metric,
             )
-
 
 def render_awake_day_violin_plots(
     visits,
@@ -1007,7 +989,6 @@ def render_awake_day_violin_plots(
                     output_path=output_dir / f"phase{phase_number}_{metric_stub}_awake_day{phase_day}_violin.png",
                     outlier_col="is_outlier",
                 )
-
 
 def render_cumulative_role_plots(
     visits,
@@ -1120,7 +1101,6 @@ def render_cumulative_role_plots(
             x_start_hours=aligned_x_start,
             onset_points=onset_points,
         )
-
 
 def render_experience_learning_plots(
     visits,
@@ -1250,7 +1230,6 @@ def render_experience_learning_plots(
                 pairwise_stats=onset_hour_pairwise,
                 outlier_col="is_outlier",
             )
-
 
 def run_analysis(
     *,

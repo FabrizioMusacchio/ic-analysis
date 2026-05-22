@@ -4,7 +4,7 @@ The functions in this module create analysis-ready tables for time-binned
 trajectories, correct-visit rates, phase-wise activity summaries, and helper
 metadata such as robust common phase-duration recommendations.
 """
-
+# %% IMPORTS
 from __future__ import annotations
 
 from typing import Literal
@@ -16,10 +16,10 @@ from scipy.stats import binomtest
 from statsmodels.stats.multicomp import pairwise_tukeyhsd
 from statsmodels.stats.multitest import multipletests
 
-
+# %%  TYPE ALIASES
 SpreadMetric = Literal["sem", "std"]
 
-
+# %% METRIC COMPUTATION FUNCTIONS
 def flag_iqr_outliers(
     data: pd.DataFrame,
     *,
@@ -63,7 +63,6 @@ def flag_iqr_outliers(
         ).fillna(False)
     return flagged
 
-
 def infer_phase_boundaries(phase_manifest: pd.DataFrame) -> dict[int, float]:
     """Infer experiment-relative phase start hours from the manifest."""
 
@@ -78,7 +77,6 @@ def infer_phase_boundaries(phase_manifest: pd.DataFrame) -> dict[int, float]:
     ).dt.total_seconds() / 3600.0
     boundaries = aligned.groupby("PhaseNumber", observed=True)["phase_start_hour"].median().to_dict()
     return {int(key): float(value) for key, value in boundaries.items()}
-
 
 def build_phase_time_limit_table(phase_manifest: pd.DataFrame) -> pd.DataFrame:
     """Build a table of observed and robust common phase durations.
@@ -116,7 +114,6 @@ def build_phase_time_limit_table(phase_manifest: pd.DataFrame) -> pd.DataFrame:
             )
     return pd.DataFrame(rows).sort_values(["PhaseNumber", "RunGroup"]).reset_index(drop=True)
 
-
 def suggest_common_phase_limits(phase_manifest: pd.DataFrame) -> dict[int, float]:
     """Return robust common phase-duration limits keyed by phase number."""
 
@@ -127,7 +124,6 @@ def suggest_common_phase_limits(phase_manifest: pd.DataFrame) -> dict[int, float
         .astype(float)
         .to_dict()
     )
-
 
 def filter_visits_by_phase_limits(
     visits: pd.DataFrame,
@@ -145,7 +141,6 @@ def filter_visits_by_phase_limits(
             & filtered["analysis_phase_elapsed_hours"].gt(float(max_hours))
         )
     return filtered.loc[keep_mask].copy()
-
 
 def build_analysis_phase_window_table(
     visits: pd.DataFrame,
@@ -172,7 +167,6 @@ def build_analysis_phase_window_table(
             }
         )
     return pd.DataFrame(rows)
-
 
 def _empty_count_tables() -> tuple[pd.DataFrame, pd.DataFrame]:
     """Return empty count-shaped mouse and summary tables."""
@@ -204,7 +198,6 @@ def _empty_count_tables() -> tuple[pd.DataFrame, pd.DataFrame]:
     )
     return empty_mouse, empty_summary
 
-
 def _summarize_mouse_values(mouse_bins: pd.DataFrame, value_col: str = "value") -> pd.DataFrame:
     """Summarize mouse-level binned values to group means, medians, and spread."""
 
@@ -225,7 +218,6 @@ def _summarize_mouse_values(mouse_bins: pd.DataFrame, value_col: str = "value") 
     summary["sem_value"] = summary["std_value"] / np.sqrt(summary["mouse_n"].clip(lower=1))
     return summary
 
-
 def _build_complete_mouse_bin_frame(
     mice: pd.DataFrame,
     max_time: float,
@@ -245,7 +237,6 @@ def _build_complete_mouse_bin_frame(
     full_index["bin_end_hours"] = full_index["bin_start_hours"] + float(bin_hours)
     full_index["bin_center_hours"] = full_index["bin_start_hours"] + float(bin_hours) / 2.0
     return full_index
-
 
 def _prepare_count_bins(
     data: pd.DataFrame,
@@ -279,7 +270,6 @@ def _prepare_count_bins(
     summary["bin_end_hours"] = summary["bin_start_hours"] + float(bin_hours)
     summary["bin_center_hours"] = summary["bin_start_hours"] + float(bin_hours) / 2.0
     return mouse_bins, summary
-
 
 def _prepare_rate_bins(
     data: pd.DataFrame,
@@ -337,14 +327,12 @@ def _prepare_rate_bins(
     summary["bin_center_hours"] = summary["bin_start_hours"] + float(bin_hours) / 2.0
     return mouse_bins, summary
 
-
 def compute_experiment_visit_bins(visits: pd.DataFrame, *, bin_hours: int) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Count total visits per mouse across the full experiment timeline."""
 
     data = visits.copy()
     data["_value"] = 1.0
     return _prepare_count_bins(data, time_col="analysis_experiment_elapsed_hours", bin_hours=bin_hours)
-
 
 def compute_experiment_drinking_visit_bins(
     visits: pd.DataFrame,
@@ -357,7 +345,6 @@ def compute_experiment_drinking_visit_bins(
     data["_value"] = 1.0
     return _prepare_count_bins(data, time_col="analysis_experiment_elapsed_hours", bin_hours=bin_hours)
 
-
 def compute_experiment_nosepoke_count_bins(
     visits: pd.DataFrame,
     *,
@@ -369,7 +356,6 @@ def compute_experiment_nosepoke_count_bins(
     data["_value"] = data["nosepoke_event_count"].fillna(0).astype(float)
     return _prepare_count_bins(data, time_col="analysis_experiment_elapsed_hours", bin_hours=bin_hours)
 
-
 def compute_experiment_lick_count_bins(
     visits: pd.DataFrame,
     *,
@@ -380,7 +366,6 @@ def compute_experiment_lick_count_bins(
     data = visits.copy()
     data["_value"] = data["LickNumber"].fillna(0).astype(float)
     return _prepare_count_bins(data, time_col="analysis_experiment_elapsed_hours", bin_hours=bin_hours)
-
 
 def compute_phase2_adaptation_bins(
     visits: pd.DataFrame,
@@ -418,7 +403,6 @@ def compute_phase2_adaptation_bins(
         "lick_count": lick_count_bins,
     }
 
-
 def compute_place_learning_count_bins(
     visits: pd.DataFrame,
     *,
@@ -437,7 +421,6 @@ def compute_place_learning_count_bins(
         bin_hours=bin_hours,
     )
 
-
 def compute_phase_visit_count_bins(
     visits: pd.DataFrame,
     *,
@@ -453,7 +436,6 @@ def compute_phase_visit_count_bins(
         time_col="analysis_phase_elapsed_hours",
         bin_hours=bin_hours,
     )
-
 
 def compute_place_learning_rate_bins(
     visits: pd.DataFrame,
@@ -471,7 +453,6 @@ def compute_place_learning_rate_bins(
         bin_hours=bin_hours,
         success_col=success_col,
     )
-
 
 def compute_phase4_reversal_rate_bins(
     visits: pd.DataFrame,
@@ -501,7 +482,6 @@ def compute_phase4_reversal_rate_bins(
         ),
     }
 
-
 def compute_phase4_reversal_count_bins(
     visits: pd.DataFrame,
     *,
@@ -529,7 +509,6 @@ def compute_phase4_reversal_count_bins(
             success_col="neutral_incorrect_corner_visit",
         ),
     }
-
 
 def _phase_segment_table(
     visits: pd.DataFrame,
@@ -567,7 +546,6 @@ def _phase_segment_table(
         + phase_visits["segment_name"].astype(str)
     )
     return phase_visits
-
 
 def compute_phase_segment_rate_tables(
     visits: pd.DataFrame,
@@ -655,7 +633,6 @@ def compute_phase_segment_rate_tables(
     summary["sem_value"] = summary["std_value"] / np.sqrt(summary["mouse_n"].clip(lower=1))
     return mouse_table, summary
 
-
 def compute_awake_day_rate_tables(
     visits: pd.DataFrame,
     *,
@@ -697,7 +674,6 @@ def compute_awake_day_rate_tables(
     )
     return mouse_table, summary
 
-
 def _fdr_bh_adjust(p_values: list[float]) -> list[float]:
     """Apply Benjamini-Hochberg FDR correction to a sequence of p-values."""
 
@@ -705,7 +681,6 @@ def _fdr_bh_adjust(p_values: list[float]) -> list[float]:
         return []
     _, adjusted, _, _ = multipletests(p_values, alpha=0.05, method="fdr_bh")
     return adjusted.tolist()
-
 
 def compute_group_day_violin_statistics(
     mouse_day_rates: pd.DataFrame,
@@ -839,7 +814,6 @@ def compute_group_day_violin_statistics(
         pd.DataFrame(pairwise_rows),
         pd.DataFrame(chance_rows),
     )
-
 
 def compute_role_cumulative_curves(
     visits: pd.DataFrame,
@@ -991,7 +965,6 @@ def compute_role_cumulative_curves(
         suffixes=("_absolute", "_relative"),
     )
 
-
 def compute_time_window_learning_curves(
     visits: pd.DataFrame,
     *,
@@ -1073,7 +1046,6 @@ def compute_time_window_learning_curves(
     summary["sem_value"] = summary["std_value"] / np.sqrt(summary["mouse_n"].clip(lower=1))
     return curve_table, summary, onset_table
 
-
 def compute_visit_window_learning_curves(
     visits: pd.DataFrame,
     *,
@@ -1152,7 +1124,6 @@ def compute_visit_window_learning_curves(
     summary["std_value"] = summary["std_value"].fillna(0.0)
     summary["sem_value"] = summary["std_value"] / np.sqrt(summary["mouse_n"].clip(lower=1))
     return curve_table, summary, onset_table
-
 
 def compute_onset_group_statistics(
     onset_table: pd.DataFrame,
@@ -1262,7 +1233,6 @@ def compute_onset_group_statistics(
     )
     return omnibus, pd.DataFrame(pairwise_rows)
 
-
 def compute_phase_activity_medians(
     visits: pd.DataFrame,
     *,
@@ -1327,7 +1297,6 @@ def compute_phase_activity_medians(
     )
     return mouse_medians.sort_values(["Group", "PhaseNumber", "ET"]).reset_index(drop=True)
 
-
 def compute_phase_activity_statistics(mouse_phase_activity: pd.DataFrame) -> pd.DataFrame:
     """Compute legacy-style phase activity statistics per pathology group.
 
@@ -1379,3 +1348,4 @@ def compute_phase_activity_statistics(mouse_phase_activity: pd.DataFrame) -> pd.
                 }
             )
     return pd.DataFrame(rows).sort_values(["Group", "PhaseNumber"]).reset_index(drop=True)
+# %% END
