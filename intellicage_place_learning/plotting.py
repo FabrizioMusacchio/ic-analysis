@@ -40,6 +40,12 @@ PHASE_COLORS = {
     4: "#1f2a78",
 }
 DEFAULT_SLEEP_SHADE_COLOR = "#e6e6e6"
+ROLE_COLORS = {
+    "PL target corner": "#2a9d8f",
+    "PR target corner": "#e76f51",
+    "Neutral corner 1": "#7f7f7f",
+    "Neutral corner 2": "#b0b0b0",
+}
 
 
 def _group_color(group_name: str) -> str:
@@ -82,7 +88,7 @@ def _add_awake_sleep_background(
     awake_end_clock_hour: float,
     label_y: float | None = None,
 ) -> None:
-    """Shade sleep intervals based on a wall-clock cycle."""
+    """Shade sleep intervals and label both sleep and awake periods."""
 
     if awake_end_clock_hour <= awake_start_clock_hour:
         raise ValueError("Only same-day awake windows are supported.")
@@ -102,6 +108,20 @@ def _add_awake_sleep_background(
             continue
         awake_intervals.append((awake_left, awake_right))
     awake_intervals.sort()
+
+    for awake_left, awake_right in awake_intervals:
+        draw_awake_left = max(awake_left, x_start)
+        draw_awake_right = min(awake_right, x_end)
+        if draw_awake_right - draw_awake_left >= 5:
+            ax.text(
+                draw_awake_left + (draw_awake_right - draw_awake_left) / 2.0,
+                label_y,
+                "awake",
+                ha="center",
+                va="top",
+                fontsize=9,
+                color="#4d4d4d",
+            )
 
     current_left = x_start
     for awake_left, awake_right in awake_intervals:
@@ -218,6 +238,41 @@ def _add_phase_band(
             color="#1f1f1f",
             transform=ax.get_xaxis_transform(),
         )
+
+
+def _add_single_phase_band(
+    ax: plt.Axes,
+    *,
+    phase_number: int,
+    label: str,
+    start_hours: float,
+    end_hours: float,
+) -> None:
+    """Add one phase band for phase-specific plots with relative x-axes."""
+
+    if end_hours <= start_hours:
+        return
+    ax.axvspan(
+        start_hours,
+        end_hours,
+        ymin=0.965,
+        ymax=1.0,
+        color=PHASE_COLORS.get(phase_number, "#cccccc"),
+        alpha=0.75,
+        linewidth=0,
+        zorder=2,
+    )
+    ax.text(
+        start_hours + (end_hours - start_hours) / 2.0,
+        0.982,
+        label,
+        ha="center",
+        va="center",
+        fontsize=9,
+        fontweight="bold",
+        color="#1f1f1f",
+        transform=ax.get_xaxis_transform(),
+    )
 
 
 def _draw_step_with_band(
@@ -342,9 +397,38 @@ def _draw_individual_trace(
 def _format_rate_axis(ax: plt.Axes, *, ylabel: str = "Visit rate [%]") -> None:
     """Format a rate axis in percent."""
 
-    ax.set_ylim(0, 105)
+    ax.set_ylim(0, 120)
     ax.set_ylabel(ylabel)
     ax.set_yticks(np.arange(0, 110, 10))
+
+
+def _phase_plot_x_start(origin_clock_hour: float, awake_start_clock_hour: float) -> float:
+    """Return the relative x-axis start so day boundaries remain mouse-day aligned."""
+
+    raw_offset = awake_start_clock_hour - origin_clock_hour
+    if raw_offset > 0:
+        raw_offset -= 24.0
+    return float(raw_offset)
+
+
+def _place_legend(
+    ax: plt.Axes,
+    *,
+    ncol: int = 1,
+    show: bool = True,
+    loc: str = "upper right",
+) -> plt.Legend | None:
+    """Place a legend slightly below the top annotations to avoid overlap."""
+
+    if not show:
+        return None
+    return ax.legend(
+        frameon=False,
+        ncol=ncol,
+        loc=loc,
+        bbox_to_anchor=(1.0, 0.88),
+        borderaxespad=0.0,
+    )
 
 
 def _p_to_star_label(p_value: float) -> str:
@@ -415,7 +499,8 @@ def plot_experiment_overview(
     )
 
     max_hour = float(group_summary["bin_end_hours"].max()) if x_end_hours is None else float(x_end_hours)
-    ax.set_xlim(0, max_hour)
+    x_start = _phase_plot_x_start(origin_clock_hour, awake_start_clock_hour)
+    ax.set_xlim(x_start, max_hour)
     ax.set_ylim(0, max(5.0, float(group_summary["mean_value"].max() + group_summary[spread_col].max()) * 1.18))
     _add_awake_sleep_background(
         ax,
@@ -425,14 +510,14 @@ def plot_experiment_overview(
         awake_start_clock_hour=awake_start_clock_hour,
         awake_end_clock_hour=awake_end_clock_hour,
     )
-    _add_day_annotations(ax, x_end=max_hour, x_start=0.0, label_every_days=2, starting_day=0)
+    _add_day_annotations(ax, x_end=max_hour, x_start=0.0, label_every_days=1, starting_day=0)
     _add_phase_band(ax, phase_window_table, phase_display_names=phase_display_names)
 
     ax.set_title(f"{group_name}: {title_label} ({bin_hours} h bins)")
     ax.set_xlabel("Elapsed experimental time [hours]")
     ax.set_ylabel(ylabel)
     ax.grid(axis="y", alpha=0.25)
-    legend = ax.legend(ncol=2, fontsize=8, frameon=False, loc="upper right")
+    legend = _place_legend(ax, ncol=2)
     if not show_individual_labels:
         for text in legend.get_texts():
             if text.get_text().startswith("ET") or text.get_text().startswith("Lo"):
@@ -466,7 +551,8 @@ def plot_experiment_overview_groups(
     spread_col = _spread_column(spread_metric)
     fig, ax = plt.subplots(figsize=(16, 6.5))
     max_hour = float(summary_bins["bin_end_hours"].max()) if x_end_hours is None else float(x_end_hours)
-    ax.set_xlim(0, max_hour)
+    x_start = _phase_plot_x_start(origin_clock_hour, awake_start_clock_hour)
+    ax.set_xlim(x_start, max_hour)
     y_max = float((summary_bins["mean_value"] + summary_bins[spread_col]).max())
     ax.set_ylim(0, max(5.0, y_max * 1.18))
 
@@ -478,7 +564,7 @@ def plot_experiment_overview_groups(
         awake_start_clock_hour=awake_start_clock_hour,
         awake_end_clock_hour=awake_end_clock_hour,
     )
-    _add_day_annotations(ax, x_end=max_hour, x_start=0.0, label_every_days=2, starting_day=0)
+    _add_day_annotations(ax, x_end=max_hour, x_start=0.0, label_every_days=1, starting_day=0)
     _add_phase_band(ax, phase_window_table, phase_display_names=phase_display_names)
 
     for group_name, group_summary in summary_bins.groupby("Group", observed=True):
@@ -497,7 +583,7 @@ def plot_experiment_overview_groups(
     ax.set_xlabel("Elapsed experimental time [hours]")
     ax.set_ylabel(ylabel)
     ax.grid(axis="y", alpha=0.25)
-    ax.legend(frameon=False, ncol=3, loc="upper right")
+    _place_legend(ax, ncol=3)
     fig.tight_layout()
     fig.savefig(output_path, dpi=300)
     plt.close(fig)
@@ -536,17 +622,19 @@ def plot_phase2_adaptation(
         float((visits_group["mean_value"] + visits_group[spread_col]).max()),
         float((secondary_group["mean_value"] + secondary_group[spread_col]).max()),
     )
-    ax.set_xlim(0, max_hour)
+    x_start = _phase_plot_x_start(origin_clock_hour, awake_start_clock_hour)
+    ax.set_xlim(x_start, max_hour)
     ax.set_ylim(0, max(5.0, y_max * 1.18))
     _add_awake_sleep_background(
         ax,
         x_end=max_hour,
-        x_start=0.0,
+        x_start=x_start,
         origin_clock_hour=origin_clock_hour,
         awake_start_clock_hour=awake_start_clock_hour,
         awake_end_clock_hour=awake_end_clock_hour,
     )
-    _add_day_annotations(ax, x_end=max_hour, x_start=0.0, label_every_days=1, starting_day=1)
+    _add_day_annotations(ax, x_end=max_hour, x_start=x_start, label_every_days=1, starting_day=1)
+    _add_single_phase_band(ax, phase_number=2, label=phase_display_name, start_hours=0.0, end_hours=max_hour)
 
     if plot_style == "line":
         _draw_trace_with_band(
@@ -600,7 +688,7 @@ def plot_phase2_adaptation(
     ax.set_xlabel("Hours since start of phase 2")
     ax.set_ylabel("Mean count per mouse and bin")
     ax.grid(axis="y", alpha=0.25)
-    ax.legend(frameon=False)
+    _place_legend(ax)
     fig.tight_layout()
     fig.savefig(output_path, dpi=300)
     plt.close(fig)
@@ -648,18 +736,26 @@ def plot_phase_learning_counts(
         )
 
     max_hour = float(group_summary["bin_end_hours"].max()) if x_end_hours is None else float(x_end_hours)
+    x_start = _phase_plot_x_start(origin_clock_hour, awake_start_clock_hour)
     y_max = max(5.0, float(group_summary["mean_value"].max() + group_summary[spread_col].max()) * 1.18)
-    ax.set_xlim(0, max_hour)
+    ax.set_xlim(x_start, max_hour)
     ax.set_ylim(0, y_max)
     _add_awake_sleep_background(
         ax,
         x_end=max_hour,
-        x_start=0.0,
+        x_start=x_start,
         origin_clock_hour=origin_clock_hour,
         awake_start_clock_hour=awake_start_clock_hour,
         awake_end_clock_hour=awake_end_clock_hour,
     )
-    _add_day_annotations(ax, x_end=max_hour, x_start=0.0, label_every_days=1, starting_day=1)
+    _add_day_annotations(ax, x_end=max_hour, x_start=x_start, label_every_days=1, starting_day=1)
+    _add_single_phase_band(
+        ax,
+        phase_number=phase_number,
+        label=phase_display_name,
+        start_hours=0.0,
+        end_hours=max_hour,
+    )
     _draw_trace_with_band(
         ax,
         group_summary,
@@ -674,7 +770,7 @@ def plot_phase_learning_counts(
     ax.set_xlabel(f"Hours since start of {phase_display_name}")
     ax.set_ylabel(ylabel)
     ax.grid(axis="y", alpha=0.25)
-    ax.legend(frameon=False)
+    _place_legend(ax)
     fig.tight_layout()
     fig.savefig(output_path, dpi=300)
     plt.close(fig)
@@ -728,17 +824,25 @@ def plot_phase_learning_rate(
         )
 
     max_hour = float(group_summary["bin_end_hours"].max()) if x_end_hours is None else float(x_end_hours)
-    ax.set_xlim(0, max_hour)
+    x_start = _phase_plot_x_start(origin_clock_hour, awake_start_clock_hour)
+    ax.set_xlim(x_start, max_hour)
     _format_rate_axis(ax, ylabel=ylabel)
     _add_awake_sleep_background(
         ax,
         x_end=max_hour,
-        x_start=0.0,
+        x_start=x_start,
         origin_clock_hour=origin_clock_hour,
         awake_start_clock_hour=awake_start_clock_hour,
         awake_end_clock_hour=awake_end_clock_hour,
     )
-    _add_day_annotations(ax, x_end=max_hour, x_start=0.0, label_every_days=1, starting_day=1)
+    _add_day_annotations(ax, x_end=max_hour, x_start=x_start, label_every_days=1, starting_day=1)
+    _add_single_phase_band(
+        ax,
+        phase_number=phase_number,
+        label=phase_display_name,
+        start_hours=0.0,
+        end_hours=max_hour,
+    )
     group_summary = group_summary.copy()
     group_summary["mean_value_pct"] = group_summary["mean_value"] * 100.0
     group_summary["spread_pct"] = group_summary[spread_col] * 100.0
@@ -763,7 +867,7 @@ def plot_phase_learning_rate(
     ax.set_title(f"{group_name}: {title_label} ({phase_display_name}, {bin_hours} h bins)")
     ax.set_xlabel(f"Hours since start of {phase_display_name}")
     ax.grid(axis="y", alpha=0.25)
-    ax.legend(frameon=False)
+    _place_legend(ax)
     fig.tight_layout()
     fig.savefig(output_path, dpi=300)
     plt.close(fig)
@@ -795,17 +899,25 @@ def plot_phase_learning_rate_groups(
     spread_col = _spread_column(spread_metric)
     fig, ax = plt.subplots(figsize=(15, 6.5))
     max_hour = float(summary_bins["bin_end_hours"].max()) if x_end_hours is None else float(x_end_hours)
-    ax.set_xlim(0, max_hour)
+    x_start = _phase_plot_x_start(origin_clock_hour, awake_start_clock_hour)
+    ax.set_xlim(x_start, max_hour)
     _format_rate_axis(ax, ylabel=ylabel)
     _add_awake_sleep_background(
         ax,
         x_end=max_hour,
-        x_start=0.0,
+        x_start=x_start,
         origin_clock_hour=origin_clock_hour,
         awake_start_clock_hour=awake_start_clock_hour,
         awake_end_clock_hour=awake_end_clock_hour,
     )
-    _add_day_annotations(ax, x_end=max_hour, x_start=0.0, label_every_days=1, starting_day=1)
+    _add_day_annotations(ax, x_end=max_hour, x_start=x_start, label_every_days=1, starting_day=1)
+    _add_single_phase_band(
+        ax,
+        phase_number=phase_number,
+        label=phase_display_name,
+        start_hours=0.0,
+        end_hours=max_hour,
+    )
 
     for group_name, group_summary in summary_bins.groupby("Group", observed=True):
         color = _group_color(str(group_name))
@@ -834,7 +946,7 @@ def plot_phase_learning_rate_groups(
     ax.set_title(f"{title_label} across groups ({phase_display_name}, {bin_hours} h bins)")
     ax.set_xlabel(f"Hours since start of {phase_display_name}")
     ax.grid(axis="y", alpha=0.25)
-    ax.legend(frameon=False, ncol=3, loc="upper right")
+    _place_legend(ax, ncol=3)
     fig.tight_layout()
     fig.savefig(output_path, dpi=300)
     plt.close(fig)
@@ -864,18 +976,27 @@ def plot_phase_learning_counts_groups(
     spread_col = _spread_column(spread_metric)
     fig, ax = plt.subplots(figsize=(15, 6.5))
     max_hour = float(summary_bins["bin_end_hours"].max()) if x_end_hours is None else float(x_end_hours)
-    ax.set_xlim(0, max_hour)
+    x_start = _phase_plot_x_start(origin_clock_hour, awake_start_clock_hour)
+    ax.set_xlim(x_start, max_hour)
     y_max = float((summary_bins["mean_value"] + summary_bins[spread_col]).max())
     ax.set_ylim(0, max(5.0, y_max * 1.18))
     _add_awake_sleep_background(
         ax,
         x_end=max_hour,
-        x_start=0.0,
+        x_start=x_start,
         origin_clock_hour=origin_clock_hour,
         awake_start_clock_hour=awake_start_clock_hour,
         awake_end_clock_hour=awake_end_clock_hour,
     )
-    _add_day_annotations(ax, x_end=max_hour, x_start=0.0, label_every_days=1, starting_day=1)
+    _add_day_annotations(ax, x_end=max_hour, x_start=x_start, label_every_days=1, starting_day=1)
+    phase_number = 3 if phase_display_name == "PL" else 4 if phase_display_name == "PR" else 3
+    _add_single_phase_band(
+        ax,
+        phase_number=phase_number,
+        label=phase_display_name,
+        start_hours=0.0,
+        end_hours=max_hour,
+    )
 
     for group_name, group_summary in summary_bins.groupby("Group", observed=True):
         _draw_trace_with_band(
@@ -893,7 +1014,7 @@ def plot_phase_learning_counts_groups(
     ax.set_xlabel(f"Hours since start of {phase_display_name}")
     ax.set_ylabel(ylabel)
     ax.grid(axis="y", alpha=0.25)
-    ax.legend(frameon=False, ncol=3, loc="upper right")
+    _place_legend(ax, ncol=3)
     fig.tight_layout()
     fig.savefig(output_path, dpi=300)
     plt.close(fig)
@@ -942,7 +1063,7 @@ def plot_experiment_dual_metric_bars(
         awake_start_clock_hour=awake_start_clock_hour,
         awake_end_clock_hour=awake_end_clock_hour,
     )
-    _add_day_annotations(ax, x_end=max_hour, x_start=0.0, label_every_days=2, starting_day=0)
+    _add_day_annotations(ax, x_end=max_hour, x_start=0.0, label_every_days=1, starting_day=0)
     _add_phase_band(ax, phase_window_table, phase_display_names=phase_display_names)
 
     if plot_style == "line":
@@ -997,7 +1118,7 @@ def plot_experiment_dual_metric_bars(
     ax.set_xlabel("Elapsed experimental time [hours]")
     ax.set_ylabel("Mean count per mouse and bin")
     ax.grid(axis="y", alpha=0.25)
-    ax.legend(frameon=False)
+    _place_legend(ax)
     fig.tight_layout()
     fig.savefig(output_path, dpi=300)
     plt.close(fig)
@@ -1041,17 +1162,19 @@ def plot_phase4_reversal_components(
     max_hour = (
         max(float(frame["bin_end_hours"].max()) for frame in prepared.values()) if x_end_hours is None else float(x_end_hours)
     )
-    ax.set_xlim(0, max_hour)
+    x_start = _phase_plot_x_start(origin_clock_hour, awake_start_clock_hour)
+    ax.set_xlim(x_start, max_hour)
     _format_rate_axis(ax, ylabel="Corner visit rate [%]")
     _add_awake_sleep_background(
         ax,
         x_end=max_hour,
-        x_start=0.0,
+        x_start=x_start,
         origin_clock_hour=origin_clock_hour,
         awake_start_clock_hour=awake_start_clock_hour,
         awake_end_clock_hour=awake_end_clock_hour,
     )
-    _add_day_annotations(ax, x_end=max_hour, x_start=0.0, label_every_days=1, starting_day=1)
+    _add_day_annotations(ax, x_end=max_hour, x_start=x_start, label_every_days=1, starting_day=1)
+    _add_single_phase_band(ax, phase_number=4, label=phase_display_name, start_hours=0.0, end_hours=max_hour)
 
     for component_name, group_summary in prepared.items():
         label, color = component_labels[component_name]
@@ -1069,7 +1192,342 @@ def plot_phase4_reversal_components(
     ax.set_title(f"{group_name}: reversal corner visit components ({phase_display_name}, {bin_hours} h bins)")
     ax.set_xlabel(f"Hours since start of {phase_display_name}")
     ax.grid(axis="y", alpha=0.25)
-    ax.legend(frameon=False, ncol=2, loc="upper right")
+    _place_legend(ax, ncol=2)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=300)
+    plt.close(fig)
+
+
+def plot_phase_segment_rate_groups(
+    summary_bins: pd.DataFrame,
+    *,
+    phase_number: int,
+    phase_display_name: str,
+    title_label: str,
+    ylabel: str,
+    output_path: Path,
+    spread_metric: str,
+    add_zero_start: bool = True,
+) -> None:
+    """Plot group mean rates across awake/sleep segments within one phase."""
+
+    if summary_bins.empty:
+        return
+
+    _prepare_output_path(output_path)
+    spread_col = _spread_column(spread_metric)
+    fig, ax = plt.subplots(figsize=(14, 6.5))
+    max_segment = int(summary_bins["segment_order"].max())
+
+    for group_name, group_summary in summary_bins.groupby("Group", observed=True):
+        group_summary = group_summary.sort_values("segment_order").copy()
+        x_values = group_summary["segment_order"].to_numpy(dtype=float)
+        y_values = group_summary["mean_value"].to_numpy(dtype=float) * 100.0
+        spread_values = group_summary[spread_col].to_numpy(dtype=float) * 100.0
+        if add_zero_start:
+            x_values = np.insert(x_values, 0, 0.0)
+            y_values = np.insert(y_values, 0, 0.0)
+            spread_values = np.insert(spread_values, 0, 0.0)
+        ax.fill_between(
+            x_values,
+            y_values - spread_values,
+            y_values + spread_values,
+            color=_group_color(str(group_name)),
+            alpha=0.18,
+            linewidth=0,
+        )
+        ax.plot(
+            x_values,
+            y_values,
+            color=_group_color(str(group_name)),
+            linewidth=2.4,
+            marker="o",
+            markersize=4.5,
+            label=str(group_name),
+        )
+
+    ax.set_xlim(0, max_segment)
+    _format_rate_axis(ax, ylabel=ylabel)
+    tick_positions = list(range(0, max_segment + 1))
+    tick_labels = ["start"] + [
+        summary_bins.loc[summary_bins["segment_order"].eq(position), "segment_label"].iloc[0].replace("Day ", "D")
+        for position in range(1, max_segment + 1)
+    ]
+    ax.set_xticks(tick_positions)
+    ax.set_xticklabels(tick_labels, rotation=30, ha="right")
+    ax.set_title(f"{title_label} across awake/sleep segments ({phase_display_name})")
+    ax.set_xlabel("Mouse-day segment")
+    ax.grid(axis="y", alpha=0.25)
+    _place_legend(ax, ncol=3)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=300)
+    plt.close(fig)
+
+
+def plot_group_day_violin(
+    mouse_day_rates: pd.DataFrame,
+    *,
+    phase_number: int,
+    phase_display_name: str,
+    phase_day: int,
+    metric_title: str,
+    ylabel: str,
+    pairwise_stats: pd.DataFrame,
+    chance_stats: pd.DataFrame,
+    output_path: Path,
+) -> None:
+    """Plot one awake-only day-wise group violin panel with significance annotations."""
+
+    panel = mouse_day_rates.loc[
+        mouse_day_rates["PhaseNumber"].eq(phase_number) & mouse_day_rates["phase_day"].eq(phase_day)
+    ].copy()
+    if panel.empty:
+        return
+
+    _prepare_output_path(output_path)
+    group_order = [str(group) for group in panel["Group"].dropna().unique()]
+    positions = np.arange(1, len(group_order) + 1)
+    fig, ax = plt.subplots(figsize=(10.5, 6.5))
+
+    violin_data: list[np.ndarray] = []
+    for group_name in group_order:
+        violin_data.append(panel.loc[panel["Group"].astype(str).eq(group_name), "value"].dropna().to_numpy(dtype=float) * 100.0)
+    violins = ax.violinplot(violin_data, positions=positions, widths=0.8, showmeans=False, showmedians=True)
+    for body, group_name in zip(violins["bodies"], group_order):
+        color = _group_color(group_name)
+        body.set_facecolor(color)
+        body.set_edgecolor(color)
+        body.set_alpha(0.25)
+    for key in ("cbars", "cmins", "cmaxes", "cmedians"):
+        if key in violins:
+            violins[key].set_color("#555555")
+            violins[key].set_linewidth(1.0)
+
+    for position, group_name, values in zip(positions, group_order, violin_data):
+        if len(values) == 0:
+            continue
+        jitter = np.linspace(-0.12, 0.12, len(values)) if len(values) > 1 else np.array([0.0])
+        ax.scatter(
+            np.full(len(values), position) + jitter,
+            values,
+            s=22,
+            color=_group_color(group_name),
+            edgecolor="white",
+            linewidth=0.4,
+            alpha=0.85,
+            zorder=3,
+        )
+
+    ax.set_xticks(positions)
+    ax.set_xticklabels(group_order, rotation=20, ha="right")
+    _format_rate_axis(ax, ylabel=ylabel)
+    ax.set_title(f"{metric_title}: {phase_display_name} day {phase_day} awake")
+    ax.grid(axis="y", alpha=0.25)
+
+    significant_pairs = pairwise_stats.loc[
+        pairwise_stats["phase_day"].eq(phase_day) & pairwise_stats["p_value"].lt(0.05)
+    ].copy()
+    y_base = 102.0
+    y_step = 5.0
+    for pair_index, (_, row) in enumerate(significant_pairs.iterrows()):
+        left = group_order.index(str(row["group1"])) + 1
+        right = group_order.index(str(row["group2"])) + 1
+        line_y = y_base + pair_index * y_step
+        ax.plot([left, left, right, right], [line_y - 0.8, line_y, line_y, line_y - 0.8], color="#444444", linewidth=1.0)
+        ax.text(
+            (left + right) / 2.0,
+            line_y + 0.6,
+            f"p={float(row['p_value']):.3g}",
+            ha="center",
+            va="bottom",
+            fontsize=8,
+            color="#444444",
+        )
+
+    for position, group_name in zip(positions, group_order):
+        chance_row = chance_stats.loc[
+            chance_stats["phase_day"].eq(phase_day) & chance_stats["Group"].astype(str).eq(group_name)
+        ]
+        if not chance_row.empty and float(chance_row["p_value"].iloc[0]) < 0.05:
+            ax.text(position, 117.0, "*", ha="center", va="center", fontsize=16, color="#222222")
+
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=300)
+    plt.close(fig)
+
+
+def plot_cumulative_role_curves(
+    summary_bins: pd.DataFrame,
+    *,
+    group_name: str,
+    output_path: Path,
+    title_label: str,
+    ylabel: str,
+    value_col: str,
+    spread_col: str,
+    plot_style: str,
+    phase_window_table: pd.DataFrame,
+    phase_display_names: dict[int, str],
+    origin_clock_hour: float,
+    awake_start_clock_hour: float,
+    awake_end_clock_hour: float,
+) -> None:
+    """Plot cumulative role-based corner trajectories for one pathology group."""
+
+    group_summary = summary_bins.loc[summary_bins["Group"].astype(str).eq(group_name)].copy()
+    if group_summary.empty:
+        return
+
+    _prepare_output_path(output_path)
+    fig, ax = plt.subplots(figsize=(15, 6.5))
+    x_start = _phase_plot_x_start(origin_clock_hour, awake_start_clock_hour)
+    max_hour = float(group_summary["bin_end_hours"].max())
+    ax.set_xlim(x_start, max_hour)
+
+    y_max = float((group_summary[value_col] + group_summary[spread_col]).max())
+    if "rate" in value_col or "relative" in value_col:
+        _format_rate_axis(ax, ylabel=ylabel)
+    else:
+        ax.set_ylim(0, max(5.0, y_max * 1.18))
+        ax.set_ylabel(ylabel)
+
+    _add_awake_sleep_background(
+        ax,
+        x_end=max_hour,
+        x_start=x_start,
+        origin_clock_hour=origin_clock_hour,
+        awake_start_clock_hour=awake_start_clock_hour,
+        awake_end_clock_hour=awake_end_clock_hour,
+    )
+    _add_day_annotations(ax, x_end=max_hour, x_start=x_start, label_every_days=1, starting_day=1)
+    _add_phase_band(ax, phase_window_table, phase_display_names=phase_display_names)
+
+    for role_name, role_summary in group_summary.groupby("corner_role", observed=True):
+        _draw_trace_with_band(
+            ax,
+            role_summary,
+            y_col=value_col,
+            spread_col=spread_col,
+            color=ROLE_COLORS.get(str(role_name), "#555555"),
+            label=str(role_name),
+            plot_style=plot_style,
+            linewidth=2.4,
+        )
+
+    ax.set_title(f"{group_name}: {title_label}")
+    ax.set_xlabel("Hours since start of PL")
+    ax.grid(axis="y", alpha=0.25)
+    _place_legend(ax, ncol=2)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=300)
+    plt.close(fig)
+
+
+def plot_visit_learning_curve_groups(
+    summary_bins: pd.DataFrame,
+    *,
+    phase_display_name: str,
+    title_label: str,
+    ylabel: str,
+    output_path: Path,
+    spread_metric: str,
+) -> None:
+    """Plot experience-dependent learning curves across groups."""
+
+    if summary_bins.empty:
+        return
+
+    _prepare_output_path(output_path)
+    spread_col = _spread_column(spread_metric)
+    fig, ax = plt.subplots(figsize=(14, 6.5))
+    max_visit = float(summary_bins["window_end_visit"].max())
+    ax.set_xlim(0, max_visit)
+    _format_rate_axis(ax, ylabel=ylabel)
+
+    for group_name, group_summary in summary_bins.groupby("Group", observed=True):
+        prepared = group_summary.copy()
+        prepared["mean_value_pct"] = prepared["mean_value"] * 100.0
+        prepared["spread_pct"] = prepared[spread_col] * 100.0
+        ax.fill_between(
+            prepared["window_center_visit"],
+            prepared["mean_value_pct"] - prepared["spread_pct"],
+            prepared["mean_value_pct"] + prepared["spread_pct"],
+            color=_group_color(str(group_name)),
+            alpha=0.18,
+            linewidth=0,
+        )
+        ax.plot(
+            prepared["window_center_visit"],
+            prepared["mean_value_pct"],
+            color=_group_color(str(group_name)),
+            linewidth=2.4,
+            label=str(group_name),
+        )
+
+    ax.axhline(25.0, color="#4f4f4f", linestyle="--", linewidth=1.2, label="Chance level (25%)")
+    ax.set_title(f"{title_label} across groups ({phase_display_name})")
+    ax.set_xlabel("Visit number")
+    ax.grid(axis="y", alpha=0.25)
+    _place_legend(ax, ncol=3)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=300)
+    plt.close(fig)
+
+
+def plot_onset_violin(
+    onset_table: pd.DataFrame,
+    *,
+    onset_col: str,
+    phase_display_name: str,
+    title_label: str,
+    ylabel: str,
+    output_path: Path,
+) -> None:
+    """Plot onset distributions per group as violins with point overlays."""
+
+    if onset_table.empty or onset_table[onset_col].dropna().empty:
+        return
+
+    _prepare_output_path(output_path)
+    plot_data = onset_table.loc[onset_table[onset_col].notna()].copy()
+    group_order = [str(group) for group in plot_data["Group"].dropna().unique()]
+    positions = np.arange(1, len(group_order) + 1)
+    fig, ax = plt.subplots(figsize=(10.5, 6.2))
+
+    violin_data = [
+        plot_data.loc[plot_data["Group"].astype(str).eq(group_name), onset_col].to_numpy(dtype=float)
+        for group_name in group_order
+    ]
+    violins = ax.violinplot(violin_data, positions=positions, widths=0.8, showmeans=False, showmedians=True)
+    for body, group_name in zip(violins["bodies"], group_order):
+        color = _group_color(group_name)
+        body.set_facecolor(color)
+        body.set_edgecolor(color)
+        body.set_alpha(0.25)
+    for key in ("cbars", "cmins", "cmaxes", "cmedians"):
+        if key in violins:
+            violins[key].set_color("#555555")
+            violins[key].set_linewidth(1.0)
+
+    for position, group_name in zip(positions, group_order):
+        values = plot_data.loc[plot_data["Group"].astype(str).eq(group_name), onset_col].to_numpy(dtype=float)
+        jitter = np.linspace(-0.12, 0.12, len(values)) if len(values) > 1 else np.array([0.0])
+        ax.scatter(
+            np.full(len(values), position) + jitter,
+            values,
+            s=22,
+            color=_group_color(group_name),
+            edgecolor="white",
+            linewidth=0.4,
+            alpha=0.85,
+            zorder=3,
+        )
+
+    ax.set_xticks(positions)
+    ax.set_xticklabels(group_order, rotation=20, ha="right")
+    ax.set_title(f"{title_label} ({phase_display_name})")
+    ax.set_ylabel(ylabel)
+    ax.grid(axis="y", alpha=0.25)
     fig.tight_layout()
     fig.savefig(output_path, dpi=300)
     plt.close(fig)

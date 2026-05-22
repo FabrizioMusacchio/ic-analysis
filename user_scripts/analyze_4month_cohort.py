@@ -9,7 +9,6 @@ directory.
 # %% IMPORTS
 from __future__ import annotations
 
-import argparse
 from pathlib import Path
 import sys
 
@@ -24,17 +23,25 @@ from intellicage_place_learning.loader import attach_analysis_time_columns
 from intellicage_place_learning.metrics import (
     build_phase_time_limit_table,
     build_analysis_phase_window_table,
+    compute_awake_day_rate_tables,
     compute_experiment_drinking_visit_bins,
     compute_experiment_lick_count_bins,
     compute_experiment_nosepoke_count_bins,
     compute_experiment_visit_bins,
+    compute_group_day_violin_statistics,
+    compute_onset_group_statistics,
     compute_phase4_reversal_rate_bins,
+    compute_phase4_reversal_count_bins,
     compute_phase2_adaptation_bins,
     compute_phase_activity_medians,
     compute_phase_activity_statistics,
+    compute_phase_segment_rate_tables,
     compute_phase_visit_count_bins,
     compute_place_learning_count_bins,
     compute_place_learning_rate_bins,
+    compute_role_cumulative_curves,
+    compute_time_window_learning_curves,
+    compute_visit_window_learning_curves,
     filter_visits_by_phase_limits,
     suggest_common_phase_limits,
 )
@@ -42,13 +49,18 @@ from intellicage_place_learning.plotting import (
     plot_experiment_dual_metric_bars,
     plot_experiment_overview,
     plot_experiment_overview_groups,
+    plot_cumulative_role_curves,
+    plot_group_day_violin,
+    plot_onset_violin,
     plot_phase2_adaptation,
     plot_phase_activity_boxplot,
     plot_phase_learning_counts,
     plot_phase_learning_counts_groups,
     plot_phase_learning_rate,
     plot_phase_learning_rate_groups,
+    plot_phase_segment_rate_groups,
     plot_phase4_reversal_components,
+    plot_visit_learning_curve_groups,
     sanitize_filename_part,
 )
 # %% PARAMETERS AND DEFAULTS
@@ -82,94 +94,21 @@ DEFAULT_SCHEDULED_PHASE_START_HOURS = {
     4: 194.0,
     5: 266.0,
 }
+USER_DATASET_ROOT = DEFAULT_DATASET_ROOT
+USER_RESULTS_SUBDIR = Path("results")
+USER_BIN_HOURS = [1, 2]
+USER_PHASE2_SECONDARY_METRIC = "lick_positive_visits"
+USER_SPREAD_METRIC = "sem"
+USER_PLOT_STYLE = "line"
+USER_PHASE2_PLOT_STYLE = "line"
+USER_PHASE_MAX_HOURS = DEFAULT_PHASE_MAX_HOURS.copy()
+USER_EXCLUDED_GROUPS = DEFAULT_EXCLUDED_GROUPS.copy()
+USER_GROUP_RENAMES = DEFAULT_GROUP_RENAMES.copy()
+USER_MOUSE_DAY_START_HOUR = DEFAULT_MOUSE_DAY_START_HOUR
+USER_AWAKE_DURATION_HOURS = DEFAULT_AWAKE_DURATION_HOURS
+USER_SCHEDULED_PHASE_START_HOURS = DEFAULT_SCHEDULED_PHASE_START_HOURS.copy()
 
 # %% FUNCTIONS
-def parse_args() -> argparse.Namespace:
-    """Parse command-line arguments for the cohort analysis script."""
-
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--dataset-root",
-        type=Path,
-        default=DEFAULT_DATASET_ROOT,
-        help="Path to the cohort directory that contains Gruppe1-4.",
-    )
-    parser.add_argument(
-        "--results-subdir",
-        type=Path,
-        default=Path("results"),
-        help="Relative results directory below the dataset root, for example `results`.",
-    )
-    parser.add_argument(
-        "--bin-hours",
-        type=int,
-        nargs="+",
-        default=[1, 2],
-        help="One or more hour-bin sizes to render, for example `--bin-hours 1 2`.",
-    )
-    parser.add_argument(
-        "--phase2-secondary-metric",
-        choices=["lick_positive_visits", "lick_count"],
-        default="lick_positive_visits",
-        help="Secondary phase-2 metric. The default uses lick-positive visits.",
-    )
-    parser.add_argument(
-        "--spread-metric",
-        choices=["sem", "std"],
-        default="sem",
-        help="Spread statistic used for shaded areas around the mean.",
-    )
-    parser.add_argument(
-        "--plot-style",
-        choices=["step", "line"],
-        default="line",
-        help="Mean-trace style to render in the user-facing plots.",
-    )
-    parser.add_argument(
-        "--phase-max-hours",
-        nargs="*",
-        default=[],
-        help="Optional phase limits such as `3=72 4=72`. These override the user-script defaults.",
-    )
-    parser.add_argument(
-        "--exclude-groups",
-        nargs="*",
-        default=None,
-        help="Optional pathology groups to exclude from the analysis.",
-    )
-    parser.add_argument(
-        "--group-rename",
-        nargs="*",
-        default=None,
-        help="Optional group renaming entries such as `tdTomato=Control`.",
-    )
-    parser.add_argument(
-        "--phase2-plot-style",
-        choices=["bar", "line"],
-        default=DEFAULT_PHASE2_PLOT_STYLE,
-        help="Display style for the phase-2 visits-versus-drinking plots.",
-    )
-    parser.add_argument(
-        "--mouse-day-start-hour",
-        type=float,
-        default=DEFAULT_MOUSE_DAY_START_HOUR,
-        help="Clock hour that defines the beginning of day 0 on the aligned mouse-day timeline.",
-    )
-    parser.add_argument(
-        "--awake-duration-hours",
-        type=float,
-        default=DEFAULT_AWAKE_DURATION_HOURS,
-        help="Duration of the active mouse period per day on the aligned timeline.",
-    )
-    parser.add_argument(
-        "--scheduled-phase-start-hours",
-        nargs="*",
-        default=[],
-        help="Optional scheduled phase start hours such as `1=0 2=74 3=122 4=194 5=266`.",
-    )
-    return parser.parse_args()
-
-
 def parse_numeric_mapping(raw_items: list[str]) -> dict[int, float]:
     """Parse `key=value` CLI strings into a numeric dictionary."""
 
@@ -774,6 +713,7 @@ def render_phase_learning_plots(
 
         if phase_number == 4:
             reversal_rate_tables = compute_phase4_reversal_rate_bins(visits, bin_hours=bin_hours)
+            reversal_count_tables = compute_phase4_reversal_count_bins(visits, bin_hours=bin_hours)
             reversal_group_summaries: dict[str, pd.DataFrame] = {}
             for component_name, (component_mouse, component_summary) in reversal_rate_tables.items():
                 save_table(
@@ -785,6 +725,106 @@ def render_phase_learning_plots(
                     output_dir / f"phase4_{component_name}_visit_rate_group_summary_{bin_hours}h.tsv",
                 )
                 reversal_group_summaries[component_name] = component_summary
+            for component_name, (component_mouse, component_summary) in reversal_count_tables.items():
+                save_table(
+                    component_mouse,
+                    output_dir / f"phase4_{component_name}_visits_absolute_mouse_bins_{bin_hours}h.tsv",
+                )
+                save_table(
+                    component_summary,
+                    output_dir / f"phase4_{component_name}_visits_absolute_group_summary_{bin_hours}h.tsv",
+                )
+                chance_level = 50.0 if component_name == "neutral_incorrect_corner" else 25.0
+                title_map = {
+                    "new_correct_corner": "new correct-corner visit rate",
+                    "previous_correct_corner": "previous correct-corner visit rate",
+                    "neutral_incorrect_corner": "neutral incorrect-corner visit rate",
+                }
+                ylabel_map = {
+                    "new_correct_corner": "New correct-corner visit rate [%]",
+                    "previous_correct_corner": "Previous correct-corner visit rate [%]",
+                    "neutral_incorrect_corner": "Neutral incorrect-corner visit rate [%]",
+                }
+                count_title_map = {
+                    "new_correct_corner": "new correct-corner visits",
+                    "previous_correct_corner": "previous correct-corner visits",
+                    "neutral_incorrect_corner": "neutral incorrect-corner visits",
+                }
+                count_ylabel_map = {
+                    "new_correct_corner": "New correct-corner visits per mouse and bin",
+                    "previous_correct_corner": "Previous correct-corner visits per mouse and bin",
+                    "neutral_incorrect_corner": "Neutral incorrect-corner visits per mouse and bin",
+                }
+                for group_name in group_names:
+                    plot_phase_learning_rate(
+                        reversal_rate_tables[component_name][0],
+                        reversal_rate_tables[component_name][1],
+                        group_name=group_name,
+                        phase_number=4,
+                        phase_display_name=phase_display_names[4],
+                        bin_hours=bin_hours,
+                        output_path=output_dir
+                        / "plots"
+                        / f"phase4_{component_name}_visit_rate_{sanitize_filename_part(group_name)}_{bin_hours}h.png",
+                        spread_metric=spread_metric,
+                        title_label=title_map[component_name],
+                        ylabel=ylabel_map[component_name],
+                        chance_level=chance_level,
+                        x_end_hours=phase_group_end_hours.get((group_name, 4)),
+                        plot_style=plot_style,
+                        origin_clock_hour=phase_origin_hour,
+                        awake_start_clock_hour=mouse_day_start_hour,
+                        awake_end_clock_hour=awake_end_clock_hour,
+                    )
+                    plot_phase_learning_counts(
+                        component_mouse,
+                        component_summary,
+                        group_name=group_name,
+                        phase_number=4,
+                        phase_display_name=phase_display_names[4],
+                        bin_hours=bin_hours,
+                        output_path=output_dir
+                        / "plots"
+                        / f"phase4_{component_name}_visits_absolute_{sanitize_filename_part(group_name)}_{bin_hours}h.png",
+                        spread_metric=spread_metric,
+                        title_label=count_title_map[component_name],
+                        ylabel=count_ylabel_map[component_name],
+                        x_end_hours=phase_group_end_hours.get((group_name, 4)),
+                        plot_style=plot_style,
+                        origin_clock_hour=phase_origin_hour,
+                        awake_start_clock_hour=mouse_day_start_hour,
+                        awake_end_clock_hour=awake_end_clock_hour,
+                    )
+                plot_phase_learning_rate_groups(
+                    reversal_rate_tables[component_name][1],
+                    phase_number=4,
+                    phase_display_name=phase_display_names[4],
+                    bin_hours=bin_hours,
+                    output_path=output_dir / "plots" / f"phase4_{component_name}_visit_rate_all_groups_{bin_hours}h.png",
+                    spread_metric=spread_metric,
+                    title_label=title_map[component_name],
+                    ylabel=ylabel_map[component_name],
+                    chance_level=chance_level,
+                    x_end_hours=phase_end_hours.get(4),
+                    plot_style=plot_style,
+                    origin_clock_hour=phase_origin_hour,
+                    awake_start_clock_hour=mouse_day_start_hour,
+                    awake_end_clock_hour=awake_end_clock_hour,
+                )
+                plot_phase_learning_counts_groups(
+                    component_summary,
+                    phase_display_name=phase_display_names[4],
+                    bin_hours=bin_hours,
+                    output_path=output_dir / "plots" / f"phase4_{component_name}_visits_absolute_all_groups_{bin_hours}h.png",
+                    spread_metric=spread_metric,
+                    x_end_hours=phase_end_hours.get(4),
+                    plot_style=plot_style,
+                    title_prefix=f"{count_title_map[component_name].capitalize()} across groups",
+                    ylabel=count_ylabel_map[component_name],
+                    origin_clock_hour=phase_origin_hour,
+                    awake_start_clock_hour=mouse_day_start_hour,
+                    awake_end_clock_hour=awake_end_clock_hour,
+                )
             for group_name in group_names:
                 plot_phase4_reversal_components(
                     reversal_group_summaries,
@@ -822,6 +862,315 @@ def render_phase_activity_plot(
         phase_display_names=phase_display_names,
         output_path=output_dir / "plots" / "phase_activity_median_visits_per_hour_boxplot.png",
     )
+
+
+def render_phase_segment_plots(
+    visits,
+    output_dir: Path,
+    *,
+    phase_display_names: dict[int, str],
+    spread_metric: str,
+    scheduled_phase_start_hours: dict[int, float],
+    mouse_day_start_hour: float,
+    awake_end_clock_hour: float,
+) -> None:
+    """Render awake/sleep-segment learning trajectories for PL and PR across groups."""
+
+    segment_metrics = [
+        ("correct_corner_visit", "correct-corner visit rate", "Correct-corner visit rate [%]"),
+        ("correct_np_visit", "correct NP visit rate", "Correct NP visit rate [%]"),
+        ("rewarded_correct_corner_visit", "rewarded correct-corner visit rate", "Rewarded correct-corner visit rate [%]"),
+    ]
+    for phase_number in (3, 4):
+        phase_origin_hour = phase_origin_clock_hour(mouse_day_start_hour, scheduled_phase_start_hours[phase_number])
+        for success_col, title_label, ylabel in segment_metrics:
+            mouse_table, summary = compute_phase_segment_rate_tables(
+                visits,
+                phase_number=phase_number,
+                success_col=success_col,
+                origin_clock_hour=phase_origin_hour,
+                awake_start_clock_hour=mouse_day_start_hour,
+                awake_end_clock_hour=awake_end_clock_hour,
+                max_days=3,
+            )
+            metric_stub = success_col.replace("_visit", "")
+            save_table(
+                mouse_table,
+                output_dir / f"phase{phase_number}_{metric_stub}_awake_sleep_segment_rate_mouse.tsv",
+            )
+            save_table(
+                summary,
+                output_dir / f"phase{phase_number}_{metric_stub}_awake_sleep_segment_rate_group_summary.tsv",
+            )
+            plot_phase_segment_rate_groups(
+                summary,
+                phase_number=phase_number,
+                phase_display_name=phase_display_names[phase_number],
+                title_label=title_label,
+                ylabel=ylabel,
+                output_path=output_dir
+                / "plots"
+                / f"phase{phase_number}_{metric_stub}_awake_sleep_segment_rate_all_groups.png",
+                spread_metric=spread_metric,
+            )
+
+
+def render_awake_day_violin_plots(
+    visits,
+    output_dir: Path,
+    *,
+    phase_display_names: dict[int, str],
+    scheduled_phase_start_hours: dict[int, float],
+    mouse_day_start_hour: float,
+    awake_end_clock_hour: float,
+) -> None:
+    """Render awake-only daily violin plots plus omnibus, pairwise, and chance statistics."""
+
+    violin_metrics = [
+        ("correct_corner_visit", "correct_corner", "correct-corner visit rate", "Correct-corner visit rate [%]", 25.0),
+        ("correct_np_visit", "correct_np", "correct NP visit rate", "Correct NP visit rate [%]", 25.0),
+        (
+            "rewarded_correct_corner_visit",
+            "rewarded_correct_corner",
+            "rewarded correct-corner visit rate",
+            "Rewarded correct-corner visit rate [%]",
+            25.0,
+        ),
+    ]
+    for phase_number in (3, 4):
+        phase_origin_hour = phase_origin_clock_hour(mouse_day_start_hour, scheduled_phase_start_hours[phase_number])
+        for success_col, metric_stub, title_label, ylabel, chance_level in violin_metrics:
+            mouse_table, _ = compute_awake_day_rate_tables(
+                visits,
+                phase_number=phase_number,
+                success_col=success_col,
+                origin_clock_hour=phase_origin_hour,
+                awake_start_clock_hour=mouse_day_start_hour,
+                awake_end_clock_hour=awake_end_clock_hour,
+                max_days=3,
+            )
+            mouse_table["PhaseNumber"] = phase_number
+            omnibus, pairwise, chance = compute_group_day_violin_statistics(
+                mouse_table,
+                phase_number=phase_number,
+                metric_name=metric_stub,
+                chance_level=chance_level / 100.0,
+            )
+            save_table(
+                mouse_table,
+                output_dir / f"phase{phase_number}_{metric_stub}_awake_day_rate_mouse.tsv",
+            )
+            save_table(
+                omnibus,
+                output_dir / f"phase{phase_number}_{metric_stub}_awake_day_rate_omnibus_stats.tsv",
+            )
+            save_table(
+                pairwise,
+                output_dir / f"phase{phase_number}_{metric_stub}_awake_day_rate_pairwise_stats.tsv",
+            )
+            save_table(
+                chance,
+                output_dir / f"phase{phase_number}_{metric_stub}_awake_day_rate_chance_stats.tsv",
+            )
+            for phase_day in (1, 2, 3):
+                plot_group_day_violin(
+                    mouse_table,
+                    phase_number=phase_number,
+                    phase_display_name=phase_display_names[phase_number],
+                    phase_day=phase_day,
+                    metric_title=title_label,
+                    ylabel=ylabel,
+                    pairwise_stats=pairwise,
+                    chance_stats=chance,
+                    output_path=output_dir
+                    / "plots"
+                    / f"phase{phase_number}_{metric_stub}_awake_day{phase_day}_violin.png",
+                )
+
+
+def render_cumulative_role_plots(
+    visits,
+    output_dir: Path,
+    *,
+    bin_hours: int,
+    group_names: list[str],
+    plot_style: str,
+    phase_display_names: dict[int, str],
+    spread_metric: str,
+    scheduled_phase_start_hours: dict[int, float],
+    mouse_day_start_hour: float,
+    awake_end_clock_hour: float,
+) -> None:
+    """Render cumulative and relative cumulative PL-to-PR corner-role plots."""
+
+    mouse_counts, summary = compute_role_cumulative_curves(visits, bin_hours=bin_hours)
+    if mouse_counts.empty or summary.empty:
+        return
+
+    save_table(mouse_counts, output_dir / f"pl_pr_cumulative_corner_roles_mouse_bins_{bin_hours}h.tsv")
+    save_table(summary, output_dir / f"pl_pr_cumulative_corner_roles_group_summary_{bin_hours}h.tsv")
+
+    phase_window_table = pd.DataFrame(
+        [
+            {"PhaseNumber": 3, "start_hours": 0.0, "end_hours": 72.0},
+            {"PhaseNumber": 4, "start_hours": 72.0, "end_hours": 144.0},
+        ]
+    )
+    origin_clock_hour = phase_origin_clock_hour(mouse_day_start_hour, scheduled_phase_start_hours[3])
+    absolute_summary = summary.rename(
+        columns={
+            "mean_value_absolute": "mean_value",
+            "sem_value_absolute": "sem_value",
+            "std_value_absolute": "std_value",
+        }
+    )
+    relative_summary = summary.rename(
+        columns={
+            "mean_value_relative": "mean_value",
+            "sem_value_relative": "sem_value",
+            "std_value_relative": "std_value",
+        }
+    )
+    relative_summary["mean_value_rate"] = relative_summary["mean_value"] * 100.0
+    relative_summary["sem_value_rate"] = relative_summary["sem_value"] * 100.0
+    relative_summary["std_value_rate"] = relative_summary["std_value"] * 100.0
+
+    for group_name in group_names:
+        plot_cumulative_role_curves(
+            absolute_summary,
+            group_name=group_name,
+            output_path=output_dir / "plots" / f"pl_pr_cumulative_corner_roles_absolute_{sanitize_filename_part(group_name)}_{bin_hours}h.png",
+            title_label=f"cumulative corner-role visits from PL to PR ({bin_hours} h bins)",
+            ylabel="Cumulative visits per mouse",
+            value_col="mean_value",
+            spread_col=f"{spread_metric}_value",
+            plot_style=plot_style,
+            phase_window_table=phase_window_table,
+            phase_display_names={3: phase_display_names[3], 4: phase_display_names[4]},
+            origin_clock_hour=origin_clock_hour,
+            awake_start_clock_hour=mouse_day_start_hour,
+            awake_end_clock_hour=awake_end_clock_hour,
+        )
+        plot_cumulative_role_curves(
+            relative_summary,
+            group_name=group_name,
+            output_path=output_dir / "plots" / f"pl_pr_cumulative_corner_roles_relative_{sanitize_filename_part(group_name)}_{bin_hours}h.png",
+            title_label=f"relative cumulative corner-role visits from PL to PR ({bin_hours} h bins)",
+            ylabel="Relative cumulative visits [%]",
+            value_col="mean_value_rate",
+            spread_col="sem_value_rate" if spread_metric == "sem" else "std_value_rate",
+            plot_style=plot_style,
+            phase_window_table=phase_window_table,
+            phase_display_names={3: phase_display_names[3], 4: phase_display_names[4]},
+            origin_clock_hour=origin_clock_hour,
+            awake_start_clock_hour=mouse_day_start_hour,
+            awake_end_clock_hour=awake_end_clock_hour,
+        )
+
+
+def render_experience_learning_plots(
+    visits,
+    output_dir: Path,
+    *,
+    phase_display_names: dict[int, str],
+    spread_metric: str,
+) -> None:
+    """Render experience-dependent learning curves and onset violins for PL and PR."""
+
+    learning_metrics = [
+        ("correct_corner_visit", "correct_corner", "correct-corner learning by visit number"),
+        ("correct_np_visit", "correct_np", "correct NP learning by visit number"),
+        ("rewarded_correct_corner_visit", "rewarded_correct_corner", "rewarded correct-corner learning by visit number"),
+    ]
+    for phase_number in (3, 4):
+        for success_col, metric_stub, title_label in learning_metrics:
+            curve_mouse, curve_summary, onset_visits = compute_visit_window_learning_curves(
+                visits,
+                phase_number=phase_number,
+                success_col=success_col,
+            )
+            save_table(
+                curve_mouse,
+                output_dir / f"phase{phase_number}_{metric_stub}_experience_learning_mouse.tsv",
+            )
+            save_table(
+                curve_summary,
+                output_dir / f"phase{phase_number}_{metric_stub}_experience_learning_group_summary.tsv",
+            )
+            save_table(
+                onset_visits,
+                output_dir / f"phase{phase_number}_{metric_stub}_experience_learning_onset.tsv",
+            )
+            onset_omnibus, onset_pairwise = compute_onset_group_statistics(
+                onset_visits,
+                onset_col="onset_visit",
+                phase_number=phase_number,
+                metric_name=metric_stub,
+            )
+            save_table(
+                onset_omnibus,
+                output_dir / f"phase{phase_number}_{metric_stub}_experience_learning_onset_omnibus_stats.tsv",
+            )
+            save_table(
+                onset_pairwise,
+                output_dir / f"phase{phase_number}_{metric_stub}_experience_learning_onset_pairwise_stats.tsv",
+            )
+            plot_visit_learning_curve_groups(
+                curve_summary,
+                phase_display_name=phase_display_names[phase_number],
+                title_label=title_label,
+                ylabel="Success probability [%]",
+                output_path=output_dir / "plots" / f"phase{phase_number}_{metric_stub}_experience_learning_all_groups.png",
+                spread_metric=spread_metric,
+            )
+            plot_onset_violin(
+                onset_visits,
+                onset_col="onset_visit",
+                phase_display_name=phase_display_names[phase_number],
+                title_label=f"{title_label} onset",
+                ylabel="Learning onset [visit number]",
+                output_path=output_dir / "plots" / f"phase{phase_number}_{metric_stub}_experience_learning_onset_violin.png",
+            )
+
+            time_curve_mouse, time_curve_summary, onset_hours = compute_time_window_learning_curves(
+                visits,
+                phase_number=phase_number,
+                success_col=success_col,
+            )
+            save_table(
+                time_curve_mouse,
+                output_dir / f"phase{phase_number}_{metric_stub}_clocktime_learning_mouse.tsv",
+            )
+            save_table(
+                time_curve_summary,
+                output_dir / f"phase{phase_number}_{metric_stub}_clocktime_learning_group_summary.tsv",
+            )
+            save_table(
+                onset_hours,
+                output_dir / f"phase{phase_number}_{metric_stub}_clocktime_learning_onset.tsv",
+            )
+            onset_hour_omnibus, onset_hour_pairwise = compute_onset_group_statistics(
+                onset_hours,
+                onset_col="onset_hours",
+                phase_number=phase_number,
+                metric_name=metric_stub,
+            )
+            save_table(
+                onset_hour_omnibus,
+                output_dir / f"phase{phase_number}_{metric_stub}_clocktime_learning_onset_omnibus_stats.tsv",
+            )
+            save_table(
+                onset_hour_pairwise,
+                output_dir / f"phase{phase_number}_{metric_stub}_clocktime_learning_onset_pairwise_stats.tsv",
+            )
+            plot_onset_violin(
+                onset_hours,
+                onset_col="onset_hours",
+                phase_display_name=phase_display_names[phase_number],
+                title_label=f"{title_label} onset",
+                ylabel="Learning onset [hours]",
+                output_path=output_dir / "plots" / f"phase{phase_number}_{metric_stub}_clocktime_learning_onset_violin.png",
+            )
 
 
 def run_analysis(
@@ -986,33 +1335,67 @@ def run_analysis(
             mouse_day_start_hour=mouse_day_start_hour,
             awake_end_clock_hour=awake_end_clock_hour,
         )
+        render_cumulative_role_plots(
+            filtered_visits,
+            bin_dir,
+            bin_hours=current_bin_hours,
+            group_names=group_names,
+            plot_style=plot_style,
+            phase_display_names=DEFAULT_PHASE_DISPLAY_NAMES,
+            spread_metric=spread_metric,
+            scheduled_phase_start_hours=merged_scheduled_phase_starts,
+            mouse_day_start_hour=mouse_day_start_hour,
+            awake_end_clock_hour=awake_end_clock_hour,
+        )
 
     render_phase_activity_plot(
         filtered_visits,
         output_root,
         phase_display_names=DEFAULT_PHASE_DISPLAY_NAMES,
     )
+    render_phase_segment_plots(
+        filtered_visits,
+        output_root,
+        phase_display_names=DEFAULT_PHASE_DISPLAY_NAMES,
+        spread_metric=spread_metric,
+        scheduled_phase_start_hours=merged_scheduled_phase_starts,
+        mouse_day_start_hour=mouse_day_start_hour,
+        awake_end_clock_hour=awake_end_clock_hour,
+    )
+    render_awake_day_violin_plots(
+        filtered_visits,
+        output_root,
+        phase_display_names=DEFAULT_PHASE_DISPLAY_NAMES,
+        scheduled_phase_start_hours=merged_scheduled_phase_starts,
+        mouse_day_start_hour=mouse_day_start_hour,
+        awake_end_clock_hour=awake_end_clock_hour,
+    )
+    render_experience_learning_plots(
+        filtered_visits,
+        output_root,
+        phase_display_names=DEFAULT_PHASE_DISPLAY_NAMES,
+        spread_metric=spread_metric,
+    )
     return output_root
 
 # %% MAIN FUNCTION
 def main() -> None:
-    """Run the full 4-month place-learning workflow from CLI arguments."""
+    """Run the full 4-month place-learning workflow from in-script settings."""
 
-    args = parse_args()
     run_analysis(
-        dataset_root=args.dataset_root,
-        results_subdir=args.results_subdir,
-        bin_hours=args.bin_hours,
-        phase2_secondary_metric=args.phase2_secondary_metric,
-        spread_metric=args.spread_metric,
-        plot_style=args.plot_style,
-        phase2_plot_style=args.phase2_plot_style,
-        phase_max_hours=parse_numeric_mapping(args.phase_max_hours),
-        excluded_groups=DEFAULT_EXCLUDED_GROUPS if args.exclude_groups is None else list(args.exclude_groups),
-        group_renames={**DEFAULT_GROUP_RENAMES, **parse_group_rename_mapping(args.group_rename)},
-        mouse_day_start_hour=args.mouse_day_start_hour,
-        awake_duration_hours=args.awake_duration_hours,
-        scheduled_phase_start_hours=parse_numeric_mapping(args.scheduled_phase_start_hours),
+        dataset_root=USER_DATASET_ROOT,
+        results_subdir=USER_RESULTS_SUBDIR,
+        bin_hours=USER_BIN_HOURS,
+        phase2_secondary_metric=USER_PHASE2_SECONDARY_METRIC,
+        spread_metric=USER_SPREAD_METRIC,
+        plot_style=USER_PLOT_STYLE,
+        phase2_plot_style=USER_PHASE2_PLOT_STYLE,
+        phase_max_hours=USER_PHASE_MAX_HOURS,
+        excluded_groups=USER_EXCLUDED_GROUPS,
+        group_renames=USER_GROUP_RENAMES,
+        mouse_day_start_hour=USER_MOUSE_DAY_START_HOUR,
+        awake_duration_hours=USER_AWAKE_DURATION_HOURS,
+        scheduled_phase_start_hours=USER_SCHEDULED_PHASE_START_HOURS,
     )
 
 # %% ENTRY POINT

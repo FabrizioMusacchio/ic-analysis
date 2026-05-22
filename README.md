@@ -27,18 +27,22 @@ The Python package now lives at the project root and is split into:
 - `intellicage_place_learning/plotting.py`
   Creates group-wise summary figures for poster preparation.
 - `user_scripts/analyze_4month_cohort.py`
-  Main entry point for the BioMedX 4-month cohort.
+  Normal user script with editable in-file settings that calls the pipeline as
+  a regular Python function.
+- `user_scripts/analyze_4month_cohort_cli.py`
+  Optional command-line wrapper that keeps the old argparse-based CLI
+  available.
 
-Run the complete analysis with:
+Run the complete analysis with the normal user script:
 
 ```bash
 conda run -n ic_placelearning python user_scripts/analyze_4month_cohort.py
 ```
 
-Useful options:
+If you prefer the CLI wrapper with explicit options:
 
 ```bash
-conda run -n ic_placelearning python user_scripts/analyze_4month_cohort.py \
+conda run -n ic_placelearning python user_scripts/analyze_4month_cohort_cli.py \
   --bin-hours 1 2 \
   --phase2-secondary-metric lick_positive_visits \
   --spread-metric sem \
@@ -49,7 +53,7 @@ conda run -n ic_placelearning python user_scripts/analyze_4month_cohort.py \
 Optional phase-time limits can be passed explicitly, for example:
 
 ```bash
-conda run -n ic_placelearning python user_scripts/analyze_4month_cohort.py \
+conda run -n ic_placelearning python user_scripts/analyze_4month_cohort_cli.py \
   --bin-hours 2 \
   --phase-max-hours 4=73.8913
 ```
@@ -61,6 +65,14 @@ The user script currently defaults to:
 - aligning the experiment to mouse day 0 at `06:00`
 - using a `12 h` awake / `12 h` sleep cycle
 - using the protocol phase starts `0 h`, `74 h`, `122 h`, `194 h`, `266 h`
+
+The same workflow can also be imported and called from another Python script:
+
+```python
+from user_scripts.analyze_4month_cohort import run_analysis
+
+run_analysis(bin_hours=[1, 2], excluded_groups=["WT"])
+```
 
 ## Outputs
 
