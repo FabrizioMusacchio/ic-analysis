@@ -23,6 +23,12 @@ import pandas as pd
 
 # %% CONSTANTS
 PHASE_NAMES: tuple[str, ...] = ("Phase1", "Phase2", "Phase3", "Phase4")
+DEFAULT_PHASE_NAME_MAP: dict[str, int] = {
+    "Phase1": 1,
+    "Phase2": 2,
+    "Phase3": 3,
+    "Phase4": 4,
+}
 PREFERRED_GROUP_ORDER: tuple[str, ...] = (
     "WT",
     "tdTomato",
@@ -59,6 +65,10 @@ def read_mice_metadata(mice_path: Path, run_group: str) -> pd.DataFrame:
     """Read one `Mice.txt` file and normalize its metadata columns."""
 
     metadata = pd.read_csv(mice_path, sep="\t")
+    if "Corner Phase 3" not in metadata.columns and "Corner Phase 1" in metadata.columns:
+        metadata = metadata.rename(columns={"Corner Phase 1": "Corner Phase 3"})
+    if "Corner Phase 4" not in metadata.columns and "Corner Phase 2" in metadata.columns:
+        metadata = metadata.rename(columns={"Corner Phase 2": "Corner Phase 4"})
     metadata = metadata.rename(
         columns={
             "VIRUS": "Group",
@@ -75,19 +85,25 @@ def read_mice_metadata(mice_path: Path, run_group: str) -> pd.DataFrame:
         "ET" + metadata["ET"],
     )
     metadata["DOB"] = pd.to_datetime(metadata["DOB"], format="%d.%m.%y", dayfirst=True, errors="coerce")
-    metadata["CornerPhase3"] = pd.to_numeric(metadata["CornerPhase3"], errors="coerce").astype("Int64")
-    metadata["CornerPhase4"] = pd.to_numeric(metadata["CornerPhase4"], errors="coerce").astype("Int64")
+    if "CornerPhase3" not in metadata.columns:
+        metadata["CornerPhase3"] = pd.Series(pd.NA, index=metadata.index, dtype="Int64")
+    else:
+        metadata["CornerPhase3"] = pd.to_numeric(metadata["CornerPhase3"], errors="coerce").astype("Int64")
+    if "CornerPhase4" not in metadata.columns:
+        metadata["CornerPhase4"] = pd.Series(pd.NA, index=metadata.index, dtype="Int64")
+    else:
+        metadata["CornerPhase4"] = pd.to_numeric(metadata["CornerPhase4"], errors="coerce").astype("Int64")
     metadata["SEX"] = metadata["SEX"].astype("string")
     metadata["Group"] = metadata["Group"].astype("string")
     return metadata
 
-def read_visits_file(visits_path: Path, run_group: str, phase_name: str) -> pd.DataFrame:
+def read_visits_file(visits_path: Path, run_group: str, phase_name: str, phase_number: int) -> pd.DataFrame:
     """Read one IntelliCage `Visits.txt` file into a typed DataFrame."""
 
     visits = pd.read_csv(visits_path, sep="\t")
     visits["RunGroup"] = run_group
     visits["Phase"] = phase_name
-    visits["PhaseNumber"] = int(phase_name.replace("Phase", ""))
+    visits["PhaseNumber"] = int(phase_number)
     visits["Start"] = pd.to_datetime(visits["Start"], errors="raise")
     visits["End"] = pd.to_datetime(visits["End"], errors="raise")
     visits["AnimalTag"] = pd.to_numeric(visits["AnimalTag"], errors="raise").astype("Int64")
@@ -96,13 +112,18 @@ def read_visits_file(visits_path: Path, run_group: str, phase_name: str) -> pd.D
     visits["visit_has_lick"] = visits["LickNumber"].fillna(0).gt(0) | visits["LickDuration"].fillna(0).gt(0)
     return visits
 
-def read_nosepokes_file(nosepokes_path: Path, run_group: str, phase_name: str) -> pd.DataFrame:
+def read_nosepokes_file(
+    nosepokes_path: Path,
+    run_group: str,
+    phase_name: str,
+    phase_number: int,
+) -> pd.DataFrame:
     """Read one IntelliCage `Nosepokes.txt` file into a typed DataFrame."""
 
     nosepokes = pd.read_csv(nosepokes_path, sep="\t")
     nosepokes["RunGroup"] = run_group
     nosepokes["Phase"] = phase_name
-    nosepokes["PhaseNumber"] = int(phase_name.replace("Phase", ""))
+    nosepokes["PhaseNumber"] = int(phase_number)
     nosepokes["Start"] = pd.to_datetime(nosepokes["Start"], errors="raise")
     nosepokes["End"] = pd.to_datetime(nosepokes["End"], errors="raise")
     nosepokes["VisitID"] = pd.to_numeric(nosepokes["VisitID"], errors="raise").astype("Int64")
@@ -177,6 +198,8 @@ def attach_analysis_time_columns(
     *,
     scheduled_phase_start_hours: dict[int, float],
     mouse_day_start_hour: float,
+    experiment_day0_start_hour: float | None = None,
+    schedule_anchor_phase_number: int | None = None,
 ) -> pd.DataFrame:
     """Attach globally aligned analysis-time columns.
 
@@ -203,6 +226,18 @@ def attach_analysis_time_columns(
         to define the exclusive end of phase 4.
     mouse_day_start_hour:
         Clock time that defines the beginning of the mouse day on day 0.
+    experiment_day0_start_hour:
+        Optional independent wall-clock hour that defines experiment elapsed
+        time zero on day 0. When omitted, the experiment timeline continues to
+        start at ``mouse_day_start_hour`` for backward compatibility. Set this
+        separately when day counting should start before the awake phase, for
+        example at midnight while the mouse day still begins at 07:00.
+    schedule_anchor_phase_number:
+        Optional raw phase number whose observed start should be aligned to the
+        configured scheduled start hour for every run group. This is useful
+        when early free-hab durations vary between runs, but all later phases
+        should be synchronized to the protocol transition point, for example
+        the observed start of NPA.
     """
 
     enriched = visits.copy()
@@ -215,8 +250,13 @@ def attach_analysis_time_columns(
     if enriched["Phase1ObservedStart"].isna().any():
         raise ValueError("Could not determine the observed phase-1 start for every run group.")
 
+    analysis_origin_hour = (
+        float(mouse_day_start_hour)
+        if experiment_day0_start_hour is None
+        else float(experiment_day0_start_hour)
+    )
     phase1_floor_day = enriched["Phase1ObservedStart"].dt.floor("D")
-    tentative_start = phase1_floor_day + pd.to_timedelta(mouse_day_start_hour, unit="h")
+    tentative_start = phase1_floor_day + pd.to_timedelta(analysis_origin_hour, unit="h")
     starts_before_day_anchor = enriched["Phase1ObservedStart"] < tentative_start
     enriched["AnalysisExperimentStart"] = tentative_start.where(
         ~starts_before_day_anchor,
@@ -225,13 +265,41 @@ def attach_analysis_time_columns(
     enriched["analysis_experiment_elapsed_hours"] = (
         enriched["Start"] - enriched["AnalysisExperimentStart"]
     ).dt.total_seconds() / 3600.0
-    enriched["analysis_experiment_day"] = np.floor(
-        enriched["analysis_experiment_elapsed_hours"] / 24.0
-    ).astype(int)
 
     sorted_phase_starts = sorted((int(key), float(value)) for key, value in scheduled_phase_start_hours.items())
     if not sorted_phase_starts:
         raise ValueError("`scheduled_phase_start_hours` must contain at least one phase start.")
+
+    if schedule_anchor_phase_number is not None:
+        anchor_phase_number = int(schedule_anchor_phase_number)
+        if anchor_phase_number not in scheduled_phase_start_hours:
+            raise ValueError(
+                "`schedule_anchor_phase_number` must be present in `scheduled_phase_start_hours`."
+            )
+        anchor_rows = phase_manifest.loc[
+            phase_manifest["PhaseNumber"].eq(anchor_phase_number),
+            ["RunGroup", "PhaseStart"],
+        ].rename(columns={"PhaseStart": "AnchorPhaseObservedStart"})
+        if anchor_rows.empty:
+            raise ValueError("Could not find the requested anchor phase in the phase manifest.")
+        enriched = enriched.merge(anchor_rows, on="RunGroup", how="left", validate="many_to_one")
+        if enriched["AnchorPhaseObservedStart"].isna().any():
+            raise ValueError("Could not determine the observed anchor-phase start for every run group.")
+        enriched["anchor_phase_observed_hours"] = (
+            enriched["AnchorPhaseObservedStart"] - enriched["AnalysisExperimentStart"]
+        ).dt.total_seconds() / 3600.0
+        enriched["schedule_alignment_offset_hours"] = (
+            float(scheduled_phase_start_hours[anchor_phase_number]) - enriched["anchor_phase_observed_hours"]
+        )
+        enriched["analysis_experiment_elapsed_hours"] = (
+            enriched["analysis_experiment_elapsed_hours"] + enriched["schedule_alignment_offset_hours"]
+        )
+    else:
+        enriched["schedule_alignment_offset_hours"] = 0.0
+
+    enriched["analysis_experiment_day"] = np.floor(
+        enriched["analysis_experiment_elapsed_hours"] / 24.0
+    ).astype(int)
 
     phase_rows: list[dict[str, float | int | str]] = []
     for index, (phase_number, start_hour) in enumerate(sorted_phase_starts):
@@ -287,10 +355,32 @@ def attach_analysis_time_columns(
     )
     return enriched
 
-def load_cohort_data(dataset_root: Path | str) -> CohortData:
-    """Load and harmonize one IntelliCage cohort directory."""
+def load_cohort_data(
+    dataset_root: Path | str,
+    *,
+    phase_name_map: dict[str, int] | None = None,
+    optional_phase_names: set[str] | list[str] | tuple[str, ...] | None = None,
+    drop_unmatched_visits: bool = False,
+) -> CohortData:
+    """Load and harmonize one IntelliCage cohort directory.
+
+    Parameters
+    ----------
+    dataset_root:
+        Root directory of one IntelliCage cohort.
+    phase_name_map:
+        Mapping from subfolder names such as ``Phase1`` or ``SP2`` to the
+        raw phase numbers that should be assigned during loading.
+    optional_phase_names:
+        Folder names that may be absent for some run groups without causing
+        the loader to fail.
+    """
 
     dataset_root = Path(dataset_root)
+    selected_phase_map = DEFAULT_PHASE_NAME_MAP.copy()
+    if phase_name_map:
+        selected_phase_map = {str(key): int(value) for key, value in phase_name_map.items()}
+    optional_phase_name_set = {str(name) for name in (optional_phase_names or set())}
     run_group_dirs = sorted(
         path for path in dataset_root.iterdir() if path.is_dir() and path.name.startswith("Gruppe")
     )
@@ -307,15 +397,19 @@ def load_cohort_data(dataset_root: Path | str) -> CohortData:
             raise FileNotFoundError(f"Missing metadata file: {mice_path}")
         metadata_frames.append(read_mice_metadata(mice_path, run_group_dir.name))
 
-        for phase_name in PHASE_NAMES:
+        for phase_name, phase_number in selected_phase_map.items():
             visits_path = run_group_dir / phase_name / "IntelliCage" / "Visits.txt"
             nosepokes_path = run_group_dir / phase_name / "IntelliCage" / "Nosepokes.txt"
             if not visits_path.exists():
+                if phase_name in optional_phase_name_set:
+                    continue
                 raise FileNotFoundError(f"Missing visit file: {visits_path}")
             if not nosepokes_path.exists():
+                if phase_name in optional_phase_name_set:
+                    continue
                 raise FileNotFoundError(f"Missing nose-poke file: {nosepokes_path}")
-            visit_frames.append(read_visits_file(visits_path, run_group_dir.name, phase_name))
-            nosepoke_frames.append(read_nosepokes_file(nosepokes_path, run_group_dir.name, phase_name))
+            visit_frames.append(read_visits_file(visits_path, run_group_dir.name, phase_name, phase_number))
+            nosepoke_frames.append(read_nosepokes_file(nosepokes_path, run_group_dir.name, phase_name, phase_number))
 
     metadata = pd.concat(metadata_frames, ignore_index=True)
     visits = pd.concat(visit_frames, ignore_index=True)
@@ -331,16 +425,25 @@ def load_cohort_data(dataset_root: Path | str) -> CohortData:
     )
     if visits["ET"].isna().any():
         missing_rows = visits.loc[visits["ET"].isna(), ["RunGroup", "AnimalTag"]].drop_duplicates()
-        raise ValueError(
-            "Some visits could not be matched to `Mice.txt` metadata. "
-            f"Missing pairs: {missing_rows.to_dict(orient='records')}"
+        if not drop_unmatched_visits:
+            raise ValueError(
+                "Some visits could not be matched to `Mice.txt` metadata. "
+                f"Missing pairs: {missing_rows.to_dict(orient='records')}"
+            )
+        visits = visits.loc[visits["ET"].notna()].copy()
+        valid_visit_keys = visits.loc[:, ["RunGroup", "Phase", "PhaseNumber", "VisitID"]].drop_duplicates()
+        nosepokes = nosepokes.merge(
+            valid_visit_keys,
+            on=["RunGroup", "Phase", "PhaseNumber", "VisitID"],
+            how="inner",
+            validate="many_to_one",
         )
 
     visits = visits.merge(
         nosepoke_summary,
         on=["RunGroup", "Phase", "PhaseNumber", "VisitID"],
         how="left",
-        validate="one_to_one",
+        validate="many_to_one",
     )
     nosepoke_columns = [
         "nosepoke_event_count",

@@ -1264,11 +1264,16 @@ def run_analysis(
     plot_style: str = "line",
     phase2_plot_style: str = DEFAULT_PHASE2_PLOT_STYLE,
     phase_max_hours: dict[int, float] | None = None,
+    phase_name_map: dict[str, int] | None = None,
+    optional_phase_names: list[str] | tuple[str, ...] | set[str] | None = None,
+    drop_unmatched_visits: bool = False,
     excluded_groups: list[str] | None = None,
     group_renames: dict[str, str] | None = None,
     group_colors: dict[str, str] | None = None,
     mouse_day_start_hour: float = DEFAULT_MOUSE_DAY_START_HOUR,
     awake_duration_hours: float = DEFAULT_AWAKE_DURATION_HOURS,
+    experiment_day0_start_hour: float | None = None,
+    schedule_anchor_phase_number: int | None = None,
     scheduled_phase_start_hours: dict[int, float] | None = None,
     base_font_size: float = 10.0,
     exclude_violin_outliers: bool = True,
@@ -1303,12 +1308,19 @@ def run_analysis(
     output_root.mkdir(parents=True, exist_ok=True)
 
     print(f"Loading cohort data from {dataset_root}...")
-    cohort = load_cohort_data(dataset_root)
+    cohort = load_cohort_data(
+        dataset_root,
+        phase_name_map=phase_name_map,
+        optional_phase_names=optional_phase_names,
+        drop_unmatched_visits=drop_unmatched_visits,
+    )
     aligned_visits = attach_analysis_time_columns(
         cohort.visits,
         cohort.phase_manifest,
         scheduled_phase_start_hours=merged_scheduled_phase_starts,
         mouse_day_start_hour=mouse_day_start_hour,
+        experiment_day0_start_hour=experiment_day0_start_hour,
+        schedule_anchor_phase_number=schedule_anchor_phase_number,
     )
     selected_visits, selected_metadata, selected_nosepokes = apply_group_preferences(
         aligned_visits,
@@ -1327,8 +1339,13 @@ def run_analysis(
                 "Setting": [
                     "mouse_day_start_hour",
                     "awake_duration_hours",
+                    "experiment_day0_start_hour",
+                    "schedule_anchor_phase_number",
                     "phase2_plot_style",
-                    "exclude_groups",
+                        "exclude_groups",
+                        "phase_name_map",
+                        "optional_phase_names",
+                        "drop_unmatched_visits",
                         "group_rename_mapping",
                         "group_color_mapping",
                         "base_font_size",
@@ -1337,8 +1354,13 @@ def run_analysis(
                 "Value": [
                     mouse_day_start_hour,
                     awake_duration_hours,
+                        "" if experiment_day0_start_hour is None else experiment_day0_start_hour,
+                        "" if schedule_anchor_phase_number is None else schedule_anchor_phase_number,
                         phase2_plot_style,
                         ",".join(selected_excluded_groups) if selected_excluded_groups else "",
+                        ";".join(f"{key}={value}" for key, value in sorted((phase_name_map or {}).items())),
+                        ",".join(sorted(str(name) for name in (optional_phase_names or []))),
+                        drop_unmatched_visits,
                         ";".join(f"{key}={value}" for key, value in selected_group_renames.items()),
                         ";".join(f"{key}={value}" for key, value in selected_group_colors.items()),
                         base_font_size,

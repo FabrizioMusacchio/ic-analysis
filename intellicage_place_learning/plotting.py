@@ -1705,6 +1705,7 @@ def plot_onset_violin(
     output_path: Path,
     pairwise_stats: pd.DataFrame | None = None,
     outlier_col: str = "is_outlier",
+    reference_line: float | None = None,
 ) -> None:
     """Plot onset distributions per group as violins with point overlays."""
 
@@ -1772,6 +1773,8 @@ def plot_onset_violin(
     ax.set_xticklabels(group_order, rotation=20, ha="right")
     ax.set_title(f"{_wrap_title(_title_start(title_label), width=34)}\n({phase_display_name})")
     ax.set_ylabel(_wrap_axis_label(ylabel))
+    if reference_line is not None:
+        ax.axhline(float(reference_line), color="#4f4f4f", linestyle="--", linewidth=1.0, zorder=1)
     ax.grid(False)
     ax.spines["left"].set_visible(False)
     ax.spines["bottom"].set_visible(False)
