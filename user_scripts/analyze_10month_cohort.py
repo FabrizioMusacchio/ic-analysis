@@ -6,8 +6,8 @@ defaults to the 10-month cohort:
 - seven IntelliCage run folders, including WT sex-specific runs
 - mouse day starts at 07:00 and the awake period ends at 19:00
 - protocol phase timing follows the protocol-aligned 10-month schedule
-- day 0 of the analysis timeline starts at 00:00, independent of the 07:00
-  awake-phase onset
+- experiment day counting follows the mouse-day definition, so day 0 begins
+  at 07:00 and captures any pre-day-1 placement interval
 - an additional sugar-preference analysis is performed on SP day 2 only
 
 The phase 1-4 place-learning analysis is intentionally kept separate from the
@@ -29,7 +29,12 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from intellicage_place_learning.loader import load_cohort_data
 from intellicage_place_learning.metrics import compute_onset_group_statistics, flag_iqr_outliers
-from intellicage_place_learning.plotting import configure_plot_style, plot_onset_violin, set_group_colors
+from intellicage_place_learning.plotting import (
+    configure_plot_style,
+    plot_onset_violin,
+    set_group_colors,
+    set_figure_size_presets,
+)
 from user_scripts.analyze_4month_cohort import (
     DEFAULT_GROUP_COLORS,
     apply_group_preferences,
@@ -66,13 +71,25 @@ DEFAULT_PHASE_MAX_HOURS = {
     3: 71.0,
     4: 71.0,
 }
+DEFAULT_FIGSIZE_CM = {
+    "LONG_FIGSIZE_CM": (18.2, 7.4),
+    "LONG_FIGSIZE_2_CM": (15.2, 7.4),
+    "PHASE2_FIGSIZE_CM": (10.4, 7.0),
+    "MEDIUM_FIGSIZE_CM": (11.8, 7.6),
+    "MEDIUM_WIDE_FIGSIZE_CM": (12.8, 8.0),
+    "SEGMENT_FIGSIZE_CM": (12.6, 7.9),
+    "VIOLIN_FIGSIZE_CM": (5.8, 7.2),
+    "ONSET_FIGSIZE_CM": (5.8, 7.0),
+    "ACTIVITY_FIGSIZE_CM": (8.8, 8.1),
+    "WIDE_GROUP_FIGSIZE_CM": (18.2, 7.4),
+}
 DEFAULT_SCHEDULED_PHASE_START_HOURS = {
     1: 0.0,
-    2: 57.0,
-    3: 105.0,
-    4: 177.0,
-    5: 249.0,
-    6: 273.0,
+    2: 74.0,
+    3: 122.0,
+    4: 194.0,
+    5: 266.0,
+    6: 290.0,
 }
 DEFAULT_GROUP_RENAMES = {
     "WT_female":    "WT female",
@@ -97,7 +114,6 @@ USER_OPTIONAL_PHASE_NAMES_WITH_SP = DEFAULT_OPTIONAL_PHASE_NAMES_WITH_SP.copy()
 USER_DROP_UNMATCHED_VISITS = True
 USER_EXCLUDED_GROUPS: list[str] = []
 USER_GROUP_RENAMES = DEFAULT_GROUP_RENAMES.copy()
-#USER_GROUP_COLORS = DEFAULT_GROUP_COLORS.copy()
 USER_GROUP_COLORS = {
     "WT":        "#264653",
     "tdTomato":  "#6c757d",
@@ -107,9 +123,11 @@ USER_GROUP_COLORS = {
     "WT female": "#264653",
     "WT male":   "#5194AE",
 }
+USER_FIGSIZE_CM = DEFAULT_FIGSIZE_CM.copy()
 USER_MOUSE_DAY_START_HOUR = 7.0
 USER_AWAKE_DURATION_HOURS = 12.0
-USER_EXPERIMENT_DAY0_START_HOUR = 0.0
+USER_EXPERIMENT_DAY0_START_HOUR = None
+USER_SCHEDULE_ANCHOR_PHASE_NUMBER = 2
 USER_SCHEDULED_PHASE_START_HOURS = DEFAULT_SCHEDULED_PHASE_START_HOURS.copy()
 USER_BASE_FONT_SIZE = 10.0
 USER_EXCLUDE_VIOLIN_OUTLIERS = True
@@ -257,6 +275,7 @@ def render_sp2_sugar_preference_analysis(
             group_colors=group_colors,
         )
     )
+    set_figure_size_presets(USER_FIGSIZE_CM)
 
     mouse_summary, group_summary = compute_sp2_preference_table(
         selected_visits,
@@ -316,9 +335,11 @@ def main() -> None:
         excluded_groups=USER_EXCLUDED_GROUPS,
         group_renames=USER_GROUP_RENAMES,
         group_colors=USER_GROUP_COLORS,
+        figure_size_cm=USER_FIGSIZE_CM,
         mouse_day_start_hour=USER_MOUSE_DAY_START_HOUR,
         awake_duration_hours=USER_AWAKE_DURATION_HOURS,
         experiment_day0_start_hour=USER_EXPERIMENT_DAY0_START_HOUR,
+        schedule_anchor_phase_number=USER_SCHEDULE_ANCHOR_PHASE_NUMBER,
         scheduled_phase_start_hours=USER_SCHEDULED_PHASE_START_HOURS,
         base_font_size=USER_BASE_FONT_SIZE,
         exclude_violin_outliers=USER_EXCLUDE_VIOLIN_OUTLIERS,

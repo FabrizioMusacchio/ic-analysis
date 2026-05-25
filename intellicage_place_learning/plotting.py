@@ -49,16 +49,28 @@ ROLE_COLORS = {
     "Neutral corner 2": "#b0b0b0",
 }
 CM_TO_INCH = 2.54
-LONG_FIGSIZE_CM         = (18.2, 7.4)
-LONG_FIGSIZE_2_CM       = (15.2, 7.4)
-PHASE2_FIGSIZE_CM       = (10.4, 7.0)
-MEDIUM_FIGSIZE_CM       = (11.8, 7.6)
-MEDIUM_WIDE_FIGSIZE_CM  = (12.8, 8.0)
-SEGMENT_FIGSIZE_CM      = (12.6, 7.9)
-VIOLIN_FIGSIZE_CM       = (5.8, 7.2)
-ONSET_FIGSIZE_CM        = (5.8, 7.0)
-ACTIVITY_FIGSIZE_CM     = (8.8, 8.1)
-WIDE_GROUP_FIGSIZE_CM   = (18.2, 7.4)
+DEFAULT_FIGURE_SIZE_CM = {
+    "LONG_FIGSIZE_CM": (18.2, 7.4),
+    "LONG_FIGSIZE_2_CM": (15.2, 7.4),
+    "PHASE2_FIGSIZE_CM": (10.4, 7.0),
+    "MEDIUM_FIGSIZE_CM": (11.8, 7.6),
+    "MEDIUM_WIDE_FIGSIZE_CM": (12.8, 8.0),
+    "SEGMENT_FIGSIZE_CM": (12.6, 7.9),
+    "VIOLIN_FIGSIZE_CM": (5.8, 7.2),
+    "ONSET_FIGSIZE_CM": (5.8, 7.0),
+    "ACTIVITY_FIGSIZE_CM": (8.8, 8.1),
+    "WIDE_GROUP_FIGSIZE_CM": (18.2, 7.4),
+}
+LONG_FIGSIZE_CM = DEFAULT_FIGURE_SIZE_CM["LONG_FIGSIZE_CM"]
+LONG_FIGSIZE_2_CM = DEFAULT_FIGURE_SIZE_CM["LONG_FIGSIZE_2_CM"]
+PHASE2_FIGSIZE_CM = DEFAULT_FIGURE_SIZE_CM["PHASE2_FIGSIZE_CM"]
+MEDIUM_FIGSIZE_CM = DEFAULT_FIGURE_SIZE_CM["MEDIUM_FIGSIZE_CM"]
+MEDIUM_WIDE_FIGSIZE_CM = DEFAULT_FIGURE_SIZE_CM["MEDIUM_WIDE_FIGSIZE_CM"]
+SEGMENT_FIGSIZE_CM = DEFAULT_FIGURE_SIZE_CM["SEGMENT_FIGSIZE_CM"]
+VIOLIN_FIGSIZE_CM = DEFAULT_FIGURE_SIZE_CM["VIOLIN_FIGSIZE_CM"]
+ONSET_FIGSIZE_CM = DEFAULT_FIGURE_SIZE_CM["ONSET_FIGSIZE_CM"]
+ACTIVITY_FIGSIZE_CM = DEFAULT_FIGURE_SIZE_CM["ACTIVITY_FIGSIZE_CM"]
+WIDE_GROUP_FIGSIZE_CM = DEFAULT_FIGURE_SIZE_CM["WIDE_GROUP_FIGSIZE_CM"]
 # %% FUNCTIONS
 def set_group_colors(color_mapping: dict[str, str] | None) -> None:
     """Update the global pathology-group color mapping used across all plots."""
@@ -66,6 +78,18 @@ def set_group_colors(color_mapping: dict[str, str] | None) -> None:
     if not color_mapping:
         return
     GROUP_COLORS.update({str(key): str(value) for key, value in color_mapping.items()})
+
+def set_figure_size_presets(size_mapping: dict[str, tuple[float, float]] | None) -> None:
+    """Update the global centimeter-based figure-size presets used by all plots."""
+
+    if not size_mapping:
+        return
+    globals_dict = globals()
+    for key, value in size_mapping.items():
+        if key not in DEFAULT_FIGURE_SIZE_CM:
+            continue
+        width_cm, height_cm = value
+        globals_dict[key] = (float(width_cm), float(height_cm))
 
 def configure_plot_style(*, font_size: float = 10.0, font_family: str = "Arial") -> None:
     """Apply global matplotlib defaults for IntelliCage poster figures."""
@@ -275,7 +299,7 @@ def _add_day_annotations(
     x_start: float = 0.0,
     label_every_days: int = 1,
     starting_day: int = 1,
-    min_label_width_hours: float = 8.0,
+    min_label_width_hours: float = 10.0,
 ) -> None:
     """Add day labels across the top of the plot."""
 
@@ -683,7 +707,7 @@ def plot_experiment_overview(
         awake_start_clock_hour=awake_start_clock_hour,
         awake_end_clock_hour=awake_end_clock_hour,
     )
-    _add_day_annotations(ax, x_end=max_hour, x_start=0.0, label_every_days=1, starting_day=0)
+    _add_day_annotations(ax, x_end=max_hour, x_start=0.0, label_every_days=1, starting_day=0, min_label_width_hours=12.0)
     _add_phase_band(ax, phase_window_table, phase_display_names=phase_display_names)
 
     ax.set_title(_wrap_title(f"{group_name}: {_title_start(title_label)} ({bin_hours} h bins)"))
@@ -734,7 +758,7 @@ def plot_experiment_overview_groups(
         awake_start_clock_hour=awake_start_clock_hour,
         awake_end_clock_hour=awake_end_clock_hour,
     )
-    _add_day_annotations(ax, x_end=max_hour, x_start=0.0, label_every_days=1, starting_day=0)
+    _add_day_annotations(ax, x_end=max_hour, x_start=0.0, label_every_days=1, starting_day=0, min_label_width_hours=12.0)
     _add_phase_band(ax, phase_window_table, phase_display_names=phase_display_names)
 
     for group_name, group_summary in summary_bins.groupby("Group", observed=True):
@@ -1229,7 +1253,7 @@ def plot_experiment_dual_metric_bars(
         awake_start_clock_hour=awake_start_clock_hour,
         awake_end_clock_hour=awake_end_clock_hour,
     )
-    _add_day_annotations(ax, x_end=max_hour, x_start=0.0, label_every_days=1, starting_day=0)
+    _add_day_annotations(ax, x_end=max_hour, x_start=0.0, label_every_days=1, starting_day=0, min_label_width_hours=12.0)
     _add_phase_band(ax, phase_window_table, phase_display_names=phase_display_names)
 
     if plot_style == "line":
@@ -1307,7 +1331,8 @@ def plot_phase4_reversal_components(
     component_labels = {
         "new_correct_corner": ("New correct corner", "#2a9d8f"),
         "previous_correct_corner": ("Previous correct corner", "#e76f51"),
-        "neutral_incorrect_corner": ("Neutral incorrect corners", "#7f7f7f"),
+        "neutral_incorrect_corner_1": ("Neutral incorrect corner 1", "#7f7f7f"),
+        "neutral_incorrect_corner_2": ("Neutral incorrect corner 2", "#b0b0b0"),
     }
     spread_col = _spread_column(spread_metric)
     prepared: dict[str, pd.DataFrame] = {}
@@ -1370,6 +1395,7 @@ def plot_phase_segment_rate_groups(
     spread_metric: str,
     add_zero_start: bool = True,
     starting_day: int = 1,
+    chance_level: float | None = None,
 ) -> None:
     """Plot group mean rates across awake/sleep segments within one phase."""
 
@@ -1417,6 +1443,14 @@ def plot_phase_segment_rate_groups(
         phase_display_name=phase_display_name,
         starting_day=starting_day,
     )
+    if chance_level is not None:
+        ax.axhline(
+            float(chance_level),
+            color="#4f4f4f",
+            linestyle="--",
+            linewidth=1.0,
+            zorder=1,
+        )
     tick_positions = [0.0] + [position - 0.5 for position in range(1, max_segment + 1)]
     tick_labels = ["start"] + [
         f"D{starting_day + ((position - 1) // 2)} {'awake' if position % 2 == 1 else 'sleep'}"

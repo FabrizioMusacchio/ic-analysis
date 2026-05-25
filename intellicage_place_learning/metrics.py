@@ -461,24 +461,50 @@ def compute_phase4_reversal_rate_bins(
 ) -> dict[str, tuple[pd.DataFrame, pd.DataFrame]]:
     """Summarize place-reversal corner-choice rates for new, previous, and neutral corners."""
 
+    phase4 = visits.loc[visits["AnalysisPhaseNumber"].eq(4)].copy()
+    if not phase4.empty:
+        neutral_1 = np.zeros(len(phase4), dtype=bool)
+        neutral_2 = np.zeros(len(phase4), dtype=bool)
+        for index, row in enumerate(phase4.itertuples(index=False)):
+            if pd.isna(row.Corner) or pd.isna(row.CornerPhase3) or pd.isna(row.CornerPhase4):
+                continue
+            neutrals = [
+                corner for corner in (1, 2, 3, 4)
+                if corner not in {int(row.CornerPhase3), int(row.CornerPhase4)}
+            ]
+            if len(neutrals) != 2:
+                continue
+            if int(row.Corner) == neutrals[0]:
+                neutral_1[index] = True
+            elif int(row.Corner) == neutrals[1]:
+                neutral_2[index] = True
+        phase4["neutral_incorrect_corner_1_visit"] = neutral_1
+        phase4["neutral_incorrect_corner_2_visit"] = neutral_2
+
     return {
         "new_correct_corner": compute_place_learning_rate_bins(
-            visits,
+            phase4,
             phase_number=4,
             bin_hours=bin_hours,
             success_col="correct_corner_visit",
         ),
         "previous_correct_corner": compute_place_learning_rate_bins(
-            visits,
+            phase4,
             phase_number=4,
             bin_hours=bin_hours,
             success_col="previous_correct_corner_visit",
         ),
-        "neutral_incorrect_corner": compute_place_learning_rate_bins(
-            visits,
+        "neutral_incorrect_corner_1": compute_place_learning_rate_bins(
+            phase4,
             phase_number=4,
             bin_hours=bin_hours,
-            success_col="neutral_incorrect_corner_visit",
+            success_col="neutral_incorrect_corner_1_visit",
+        ),
+        "neutral_incorrect_corner_2": compute_place_learning_rate_bins(
+            phase4,
+            phase_number=4,
+            bin_hours=bin_hours,
+            success_col="neutral_incorrect_corner_2_visit",
         ),
     }
 
@@ -489,24 +515,50 @@ def compute_phase4_reversal_count_bins(
 ) -> dict[str, tuple[pd.DataFrame, pd.DataFrame]]:
     """Summarize phase-4 reversal component counts for new, old, and neutral corners."""
 
+    phase4 = visits.loc[visits["AnalysisPhaseNumber"].eq(4)].copy()
+    if not phase4.empty:
+        neutral_1 = np.zeros(len(phase4), dtype=bool)
+        neutral_2 = np.zeros(len(phase4), dtype=bool)
+        for index, row in enumerate(phase4.itertuples(index=False)):
+            if pd.isna(row.Corner) or pd.isna(row.CornerPhase3) or pd.isna(row.CornerPhase4):
+                continue
+            neutrals = [
+                corner for corner in (1, 2, 3, 4)
+                if corner not in {int(row.CornerPhase3), int(row.CornerPhase4)}
+            ]
+            if len(neutrals) != 2:
+                continue
+            if int(row.Corner) == neutrals[0]:
+                neutral_1[index] = True
+            elif int(row.Corner) == neutrals[1]:
+                neutral_2[index] = True
+        phase4["neutral_incorrect_corner_1_visit"] = neutral_1
+        phase4["neutral_incorrect_corner_2_visit"] = neutral_2
+
     return {
         "new_correct_corner": compute_place_learning_count_bins(
-            visits,
+            phase4,
             phase_number=4,
             bin_hours=bin_hours,
             success_col="correct_corner_visit",
         ),
         "previous_correct_corner": compute_place_learning_count_bins(
-            visits,
+            phase4,
             phase_number=4,
             bin_hours=bin_hours,
             success_col="previous_correct_corner_visit",
         ),
-        "neutral_incorrect_corner": compute_place_learning_count_bins(
-            visits,
+        "neutral_incorrect_corner_1": compute_place_learning_count_bins(
+            phase4,
             phase_number=4,
             bin_hours=bin_hours,
-            success_col="neutral_incorrect_corner_visit",
+            success_col="neutral_incorrect_corner_1_visit",
+        ),
+        "neutral_incorrect_corner_2": compute_place_learning_count_bins(
+            phase4,
+            phase_number=4,
+            bin_hours=bin_hours,
+            success_col="neutral_incorrect_corner_2_visit",
         ),
     }
 
@@ -725,59 +777,102 @@ def compute_group_day_violin_statistics(
         normal_path = bool(shapiro_ok and not np.isnan(levene_p) and levene_p > 0.05)
 
         if normal_path:
-            omnibus_p = float(stats.f_oneway(*grouped.values()).pvalue)
-            omnibus_test = "anova"
-            tukey = pairwise_tukeyhsd(
-                endog=day_data.loc[day_data["value"].notna(), "value"].to_numpy(),
-                groups=day_data.loc[day_data["value"].notna(), "Group"].astype(str).to_numpy(),
-            )
-            tukey_table = pd.DataFrame(tukey._results_table.data[1:], columns=tukey._results_table.data[0])
-            tukey_table["group1"] = tukey_table["group1"].astype(str)
-            tukey_table["group2"] = tukey_table["group2"].astype(str)
-            tukey_table["p_value"] = tukey_table["p-adj"].astype(float)
-            for _, row in tukey_table.iterrows():
+            if len(grouped) == 2:
+                group_names = list(grouped)
+                omnibus_p = float(
+                    stats.ttest_ind(
+                        grouped[group_names[0]],
+                        grouped[group_names[1]],
+                        equal_var=bool(levene_p > 0.05) if not np.isnan(levene_p) else True,
+                    ).pvalue
+                )
+                omnibus_test = "ttest_ind"
                 pairwise_rows.append(
                     {
                         "PhaseNumber": phase_number,
                         "Metric": metric_name,
                         "phase_day": int(phase_day),
-                        "test": "tukey_hsd",
-                        "group1": row["group1"],
-                        "group2": row["group2"],
-                        "p_value": float(row["p_value"]),
+                        "test": "ttest_ind",
+                        "group1": group_names[0],
+                        "group2": group_names[1],
+                        "p_value": float(omnibus_p),
                     }
                 )
-        else:
-            omnibus_p = float(stats.kruskal(*grouped.values()).pvalue)
-            omnibus_test = "kruskal"
-            raw_ps: list[float] = []
-            pairs: list[tuple[str, str]] = []
-            group_names = list(grouped)
-            for left_index, left_group in enumerate(group_names):
-                for right_group in group_names[left_index + 1 :]:
-                    raw_ps.append(
-                        float(
-                            stats.mannwhitneyu(
-                                grouped[left_group],
-                                grouped[right_group],
-                                alternative="two-sided",
-                            ).pvalue
-                        )
+            else:
+                omnibus_p = float(stats.f_oneway(*grouped.values()).pvalue)
+                omnibus_test = "anova"
+                tukey = pairwise_tukeyhsd(
+                    endog=day_data.loc[day_data["value"].notna(), "value"].to_numpy(),
+                    groups=day_data.loc[day_data["value"].notna(), "Group"].astype(str).to_numpy(),
+                )
+                tukey_table = pd.DataFrame(tukey._results_table.data[1:], columns=tukey._results_table.data[0])
+                tukey_table["group1"] = tukey_table["group1"].astype(str)
+                tukey_table["group2"] = tukey_table["group2"].astype(str)
+                tukey_table["p_value"] = tukey_table["p-adj"].astype(float)
+                for _, row in tukey_table.iterrows():
+                    pairwise_rows.append(
+                        {
+                            "PhaseNumber": phase_number,
+                            "Metric": metric_name,
+                            "phase_day": int(phase_day),
+                            "test": "tukey_hsd",
+                            "group1": row["group1"],
+                            "group2": row["group2"],
+                            "p_value": float(row["p_value"]),
+                        }
                     )
-                    pairs.append((left_group, right_group))
-            adjusted = _fdr_bh_adjust(raw_ps)
-            for (left_group, right_group), p_value in zip(pairs, adjusted):
+        else:
+            group_names = list(grouped)
+            if len(grouped) == 2:
+                omnibus_p = float(
+                    stats.mannwhitneyu(
+                        grouped[group_names[0]],
+                        grouped[group_names[1]],
+                        alternative="two-sided",
+                    ).pvalue
+                )
+                omnibus_test = "mannwhitney"
                 pairwise_rows.append(
                     {
                         "PhaseNumber": phase_number,
                         "Metric": metric_name,
                         "phase_day": int(phase_day),
-                        "test": "mannwhitney_fdr_bh",
-                        "group1": left_group,
-                        "group2": right_group,
-                        "p_value": float(p_value),
+                        "test": "mannwhitney",
+                        "group1": group_names[0],
+                        "group2": group_names[1],
+                        "p_value": float(omnibus_p),
                     }
                 )
+            else:
+                omnibus_p = float(stats.kruskal(*grouped.values()).pvalue)
+                omnibus_test = "kruskal"
+                raw_ps: list[float] = []
+                pairs: list[tuple[str, str]] = []
+                for left_index, left_group in enumerate(group_names):
+                    for right_group in group_names[left_index + 1 :]:
+                        raw_ps.append(
+                            float(
+                                stats.mannwhitneyu(
+                                    grouped[left_group],
+                                    grouped[right_group],
+                                    alternative="two-sided",
+                                ).pvalue
+                            )
+                        )
+                        pairs.append((left_group, right_group))
+                adjusted = _fdr_bh_adjust(raw_ps)
+                for (left_group, right_group), p_value in zip(pairs, adjusted):
+                    pairwise_rows.append(
+                        {
+                            "PhaseNumber": phase_number,
+                            "Metric": metric_name,
+                            "phase_day": int(phase_day),
+                            "test": "mannwhitney_fdr_bh",
+                            "group1": left_group,
+                            "group2": right_group,
+                            "p_value": float(p_value),
+                        }
+                    )
 
         omnibus_rows.append(
             {
@@ -1165,59 +1260,102 @@ def compute_onset_group_statistics(
 
     pairwise_rows: list[dict[str, object]] = []
     if normal_path:
-        omnibus_p = float(stats.f_oneway(*grouped.values()).pvalue)
-        omnibus_test = "anova"
-        tukey = pairwise_tukeyhsd(
-            endog=data[onset_col].to_numpy(dtype=float),
-            groups=data["Group"].astype(str).to_numpy(),
-        )
-        tukey_table = pd.DataFrame(tukey._results_table.data[1:], columns=tukey._results_table.data[0])
-        tukey_table["group1"] = tukey_table["group1"].astype(str)
-        tukey_table["group2"] = tukey_table["group2"].astype(str)
-        tukey_table["p_value"] = tukey_table["p-adj"].astype(float)
-        for _, row in tukey_table.iterrows():
+        if len(grouped) == 2:
+            group_names = list(grouped)
+            omnibus_p = float(
+                stats.ttest_ind(
+                    grouped[group_names[0]],
+                    grouped[group_names[1]],
+                    equal_var=bool(levene_p > 0.05) if not np.isnan(levene_p) else True,
+                ).pvalue
+            )
+            omnibus_test = "ttest_ind"
             pairwise_rows.append(
                 {
                     "PhaseNumber": phase_number,
                     "Metric": metric_name,
                     "OnsetColumn": onset_col,
-                    "test": "tukey_hsd",
-                    "group1": row["group1"],
-                    "group2": row["group2"],
-                    "p_value": float(row["p_value"]),
+                    "test": "ttest_ind",
+                    "group1": group_names[0],
+                    "group2": group_names[1],
+                    "p_value": float(omnibus_p),
                 }
             )
-    else:
-        omnibus_p = float(stats.kruskal(*grouped.values()).pvalue)
-        omnibus_test = "kruskal"
-        raw_ps: list[float] = []
-        pairs: list[tuple[str, str]] = []
-        group_names = list(grouped)
-        for left_index, left_group in enumerate(group_names):
-            for right_group in group_names[left_index + 1 :]:
-                raw_ps.append(
-                    float(
-                        stats.mannwhitneyu(
-                            grouped[left_group],
-                            grouped[right_group],
-                            alternative="two-sided",
-                        ).pvalue
-                    )
+        else:
+            omnibus_p = float(stats.f_oneway(*grouped.values()).pvalue)
+            omnibus_test = "anova"
+            tukey = pairwise_tukeyhsd(
+                endog=data[onset_col].to_numpy(dtype=float),
+                groups=data["Group"].astype(str).to_numpy(),
+            )
+            tukey_table = pd.DataFrame(tukey._results_table.data[1:], columns=tukey._results_table.data[0])
+            tukey_table["group1"] = tukey_table["group1"].astype(str)
+            tukey_table["group2"] = tukey_table["group2"].astype(str)
+            tukey_table["p_value"] = tukey_table["p-adj"].astype(float)
+            for _, row in tukey_table.iterrows():
+                pairwise_rows.append(
+                    {
+                        "PhaseNumber": phase_number,
+                        "Metric": metric_name,
+                        "OnsetColumn": onset_col,
+                        "test": "tukey_hsd",
+                        "group1": row["group1"],
+                        "group2": row["group2"],
+                        "p_value": float(row["p_value"]),
+                    }
                 )
-                pairs.append((left_group, right_group))
-        adjusted = _fdr_bh_adjust(raw_ps)
-        for (left_group, right_group), p_value in zip(pairs, adjusted):
+    else:
+        group_names = list(grouped)
+        if len(grouped) == 2:
+            omnibus_p = float(
+                stats.mannwhitneyu(
+                    grouped[group_names[0]],
+                    grouped[group_names[1]],
+                    alternative="two-sided",
+                ).pvalue
+            )
+            omnibus_test = "mannwhitney"
             pairwise_rows.append(
                 {
                     "PhaseNumber": phase_number,
                     "Metric": metric_name,
                     "OnsetColumn": onset_col,
-                    "test": "mannwhitney_fdr_bh",
-                    "group1": left_group,
-                    "group2": right_group,
-                    "p_value": float(p_value),
+                    "test": "mannwhitney",
+                    "group1": group_names[0],
+                    "group2": group_names[1],
+                    "p_value": float(omnibus_p),
                 }
             )
+        else:
+            omnibus_p = float(stats.kruskal(*grouped.values()).pvalue)
+            omnibus_test = "kruskal"
+            raw_ps: list[float] = []
+            pairs: list[tuple[str, str]] = []
+            for left_index, left_group in enumerate(group_names):
+                for right_group in group_names[left_index + 1 :]:
+                    raw_ps.append(
+                        float(
+                            stats.mannwhitneyu(
+                                grouped[left_group],
+                                grouped[right_group],
+                                alternative="two-sided",
+                            ).pvalue
+                        )
+                    )
+                    pairs.append((left_group, right_group))
+            adjusted = _fdr_bh_adjust(raw_ps)
+            for (left_group, right_group), p_value in zip(pairs, adjusted):
+                pairwise_rows.append(
+                    {
+                        "PhaseNumber": phase_number,
+                        "Metric": metric_name,
+                        "OnsetColumn": onset_col,
+                        "test": "mannwhitney_fdr_bh",
+                        "group1": left_group,
+                        "group2": right_group,
+                        "p_value": float(p_value),
+                    }
+                )
 
     omnibus = pd.DataFrame(
         [

@@ -65,6 +65,7 @@ from intellicage_place_learning.plotting import (
     plot_visit_learning_curve_groups,
     sanitize_filename_part,
     set_group_colors,
+    set_figure_size_presets,
 )
 # %% PARAMETERS AND DEFAULTS
 DEFAULT_DATASET_ROOT = PROJECT_ROOT / "Data IntelliCage" / "BioMedX_4MonthCohort_2019"
@@ -93,6 +94,18 @@ DEFAULT_GROUP_COLORS = {
     "Tau 1-421": "#e9a820",
     "Tau 1-441": "#4ade80",
 }
+DEFAULT_FIGSIZE_CM = {
+    "LONG_FIGSIZE_CM": (18.2, 7.4),
+    "LONG_FIGSIZE_2_CM": (15.2, 7.4),
+    "PHASE2_FIGSIZE_CM": (10.4, 7.0),
+    "MEDIUM_FIGSIZE_CM": (11.8, 7.6),
+    "MEDIUM_WIDE_FIGSIZE_CM": (12.8, 8.0),
+    "SEGMENT_FIGSIZE_CM": (12.6, 7.9),
+    "VIOLIN_FIGSIZE_CM": (5.8, 7.2),
+    "ONSET_FIGSIZE_CM": (5.8, 7.0),
+    "ACTIVITY_FIGSIZE_CM": (8.8, 8.1),
+    "WIDE_GROUP_FIGSIZE_CM": (18.2, 7.4),
+}
 DEFAULT_PHASE2_PLOT_STYLE = "line"
 DEFAULT_MOUSE_DAY_START_HOUR = 6.0
 DEFAULT_AWAKE_DURATION_HOURS = 12.0
@@ -114,6 +127,7 @@ USER_PHASE_MAX_HOURS = DEFAULT_PHASE_MAX_HOURS.copy()
 USER_EXCLUDED_GROUPS = DEFAULT_EXCLUDED_GROUPS.copy()
 USER_GROUP_RENAMES = DEFAULT_GROUP_RENAMES.copy()
 USER_GROUP_COLORS = DEFAULT_GROUP_COLORS.copy()
+USER_FIGSIZE_CM = DEFAULT_FIGSIZE_CM.copy()
 USER_MOUSE_DAY_START_HOUR = DEFAULT_MOUSE_DAY_START_HOUR
 USER_AWAKE_DURATION_HOURS = DEFAULT_AWAKE_DURATION_HOURS
 USER_SCHEDULED_PHASE_START_HOURS = DEFAULT_SCHEDULED_PHASE_START_HOURS.copy()
@@ -244,6 +258,11 @@ def apply_group_preferences(
         raise ValueError("No visits remain after applying the group-selection settings.")
 
     seen: list[str] = []
+    preferred_order = [str(name) for name in (group_renames or {}).values()]
+    available_groups = set(visits["Group"].astype(str))
+    for group_name in preferred_order:
+        if group_name in available_groups and group_name not in seen:
+            seen.append(group_name)
     for group_name in visits["Group"].astype(str):
         if group_name not in seen:
             seen.append(group_name)
@@ -759,22 +778,26 @@ def render_phase_learning_plots(
                 title_map = {
                     "new_correct_corner": "new correct-corner visit rate",
                     "previous_correct_corner": "previous correct-corner visit rate",
-                    "neutral_incorrect_corner": "neutral incorrect-corner visit rate",
+                    "neutral_incorrect_corner_1": "neutral incorrect-corner 1 visit rate",
+                    "neutral_incorrect_corner_2": "neutral incorrect-corner 2 visit rate",
                 }
                 ylabel_map = {
                     "new_correct_corner": "New correct-corner visit rate [%]",
                     "previous_correct_corner": "Previous correct-corner visit rate [%]",
-                    "neutral_incorrect_corner": "Neutral incorrect-corner visit rate [%]",
+                    "neutral_incorrect_corner_1": "Neutral incorrect-corner 1 visit rate [%]",
+                    "neutral_incorrect_corner_2": "Neutral incorrect-corner 2 visit rate [%]",
                 }
                 count_title_map = {
                     "new_correct_corner": "new correct-corner visits",
                     "previous_correct_corner": "previous correct-corner visits",
-                    "neutral_incorrect_corner": "neutral incorrect-corner visits",
+                    "neutral_incorrect_corner_1": "neutral incorrect-corner 1 visits",
+                    "neutral_incorrect_corner_2": "neutral incorrect-corner 2 visits",
                 }
                 count_ylabel_map = {
                     "new_correct_corner": "New correct-corner visits per mouse and bin",
                     "previous_correct_corner": "Previous correct-corner visits per mouse and bin",
-                    "neutral_incorrect_corner": "Neutral incorrect-corner visits per mouse and bin",
+                    "neutral_incorrect_corner_1": "Neutral incorrect-corner 1 visits per mouse and bin",
+                    "neutral_incorrect_corner_2": "Neutral incorrect-corner 2 visits per mouse and bin",
                 }
                 for group_name in group_names:
                     plot_phase_learning_rate(
@@ -930,6 +953,7 @@ def render_phase_segment_plots(
                 output_path=output_dir / f"phase{phase_number}_{metric_stub}_awake_sleep_segment_rate_all_groups.png",
                 spread_metric=spread_metric,
                 starting_day=phase_start_day,
+                chance_level=25.0,
             )
 
 def render_awake_day_violin_plots(
@@ -1270,6 +1294,7 @@ def run_analysis(
     excluded_groups: list[str] | None = None,
     group_renames: dict[str, str] | None = None,
     group_colors: dict[str, str] | None = None,
+    figure_size_cm: dict[str, tuple[float, float]] | None = None,
     mouse_day_start_hour: float = DEFAULT_MOUSE_DAY_START_HOUR,
     awake_duration_hours: float = DEFAULT_AWAKE_DURATION_HOURS,
     experiment_day0_start_hour: float | None = None,
@@ -1300,6 +1325,7 @@ def run_analysis(
     )
     configure_plot_style(font_size=base_font_size, font_family="Arial")
     set_group_colors(selected_group_colors)
+    set_figure_size_presets(figure_size_cm)
     awake_start_clock_hour, awake_end_clock_hour = active_period_bounds(
         mouse_day_start_hour,
         awake_duration_hours,
@@ -1346,11 +1372,12 @@ def run_analysis(
                         "phase_name_map",
                         "optional_phase_names",
                         "drop_unmatched_visits",
-                        "group_rename_mapping",
-                        "group_color_mapping",
-                        "base_font_size",
-                        "exclude_violin_outliers",
-                    ],
+                    "group_rename_mapping",
+                    "group_color_mapping",
+                    "figure_size_cm",
+                    "base_font_size",
+                    "exclude_violin_outliers",
+                ],
                 "Value": [
                     mouse_day_start_hour,
                     awake_duration_hours,
@@ -1363,6 +1390,7 @@ def run_analysis(
                         drop_unmatched_visits,
                         ";".join(f"{key}={value}" for key, value in selected_group_renames.items()),
                         ";".join(f"{key}={value}" for key, value in selected_group_colors.items()),
+                        ";".join(f"{key}={value}" for key, value in (figure_size_cm or {}).items()),
                         base_font_size,
                         exclude_violin_outliers,
                     ],
@@ -1525,6 +1553,7 @@ def main() -> None:
         excluded_groups=USER_EXCLUDED_GROUPS,
         group_renames=USER_GROUP_RENAMES,
         group_colors=USER_GROUP_COLORS,
+        figure_size_cm=USER_FIGSIZE_CM,
         mouse_day_start_hour=USER_MOUSE_DAY_START_HOUR,
         awake_duration_hours=USER_AWAKE_DURATION_HOURS,
         scheduled_phase_start_hours=USER_SCHEDULED_PHASE_START_HOURS,
