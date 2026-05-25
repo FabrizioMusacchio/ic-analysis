@@ -71,7 +71,7 @@ DEFAULT_PHASE_MAX_HOURS = {
     3: 71.0,
     4: 71.0,
 }
-DEFAULT_FIGSIZE_CM = {
+DEFAULT_FIGSIZE_CM = { # always a pair of (width, height)
     "LONG_FIGSIZE_CM": (18.2, 7.4),
     "LONG_FIGSIZE_2_CM": (15.2, 7.4),
     "PHASE2_FIGSIZE_CM": (10.4, 7.0),
@@ -92,12 +92,13 @@ DEFAULT_SCHEDULED_PHASE_START_HOURS = {
     6: 290.0,
 }
 DEFAULT_GROUP_RENAMES = {
+    "WT":           "WT",
     "WT_female":    "WT female",
     "WT_male":      "WT male",
     "tdTomato":     "tdTomato",
-    "Tau 66-421":   "Tau 66-421",
-    "Tau 1-421":    "Tau 1-421",
     "Tau 1-441":    "Tau 1-441",
+    "Tau 1-421":    "Tau 1-421",
+    "Tau 66-421":   "Tau 66-421",
 }
 
 USER_DATASET_ROOT = DEFAULT_DATASET_ROOT
@@ -112,14 +113,14 @@ USER_PHASE_NAME_MAP = DEFAULT_PHASE_NAME_MAP.copy()
 USER_PHASE_NAME_MAP_WITH_SP = DEFAULT_PHASE_NAME_MAP_WITH_SP.copy()
 USER_OPTIONAL_PHASE_NAMES_WITH_SP = DEFAULT_OPTIONAL_PHASE_NAMES_WITH_SP.copy()
 USER_DROP_UNMATCHED_VISITS = True
-USER_EXCLUDED_GROUPS: list[str] = []
+USER_EXCLUDED_GROUPS: list[str] = ["WT"]
 USER_GROUP_RENAMES = DEFAULT_GROUP_RENAMES.copy()
 USER_GROUP_COLORS = {
     "WT":        "#264653",
     "tdTomato":  "#6c757d",
-    "Tau 66-421":"#2a9d8f",
-    "Tau 1-421": "#e9a820",
     "Tau 1-441": "#4ade80",
+    "Tau 1-421": "#e9a820",
+    "Tau 66-421":"#2a9d8f",
     "WT female": "#264653",
     "WT male":   "#5194AE",
 }

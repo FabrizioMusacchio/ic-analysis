@@ -94,7 +94,7 @@ DEFAULT_GROUP_COLORS = {
     "Tau 1-421": "#e9a820",
     "Tau 1-441": "#4ade80",
 }
-DEFAULT_FIGSIZE_CM = {
+DEFAULT_FIGSIZE_CM = {# always a pair of (width, height)
     "LONG_FIGSIZE_CM": (18.2, 7.4),
     "LONG_FIGSIZE_2_CM": (15.2, 7.4),
     "PHASE2_FIGSIZE_CM": (10.4, 7.0),
