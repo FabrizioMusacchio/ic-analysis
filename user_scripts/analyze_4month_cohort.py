@@ -193,6 +193,12 @@ def phase_origin_clock_hour(mouse_day_start_hour: float, scheduled_phase_start_h
 
     return float((mouse_day_start_hour + (scheduled_phase_start_hour % 24.0)) % 24.0)
 
+
+def experiment_day_from_scheduled_start(scheduled_phase_start_hour: float) -> int:
+    """Convert one scheduled phase-start hour to its global experiment-day number."""
+
+    return int(scheduled_phase_start_hour // 24.0)
+
 def save_table(dataframe, output_path: Path) -> None:
     """Save a DataFrame as a tab-separated text file with parent creation."""
 
@@ -375,6 +381,7 @@ def render_phase2_plots(
     plot_style: str,
     spread_metric: str,
     phase_origin_hour: float,
+    phase_start_day: int,
     mouse_day_start_hour: float,
     awake_end_clock_hour: float,
 ) -> None:
@@ -423,6 +430,7 @@ def render_phase2_plots(
             origin_clock_hour=phase_origin_hour,
             awake_start_clock_hour=mouse_day_start_hour,
             awake_end_clock_hour=awake_end_clock_hour,
+            starting_day=phase_start_day,
         )
 
 def render_phase2_control_plots(
@@ -562,6 +570,7 @@ def render_phase_learning_plots(
             mouse_day_start_hour,
             scheduled_phase_start_hours[phase_number],
         )
+        phase_start_day = experiment_day_from_scheduled_start(scheduled_phase_start_hours[phase_number])
         phase_visit_mouse, phase_visit_summary = compute_phase_visit_count_bins(
             visits,
             phase_number=phase_number,
@@ -652,6 +661,7 @@ def render_phase_learning_plots(
                     origin_clock_hour=phase_origin_hour,
                     awake_start_clock_hour=mouse_day_start_hour,
                     awake_end_clock_hour=awake_end_clock_hour,
+                    starting_day=phase_start_day,
                 )
                 plot_phase_learning_rate(
                     metric_mouse,
@@ -670,6 +680,7 @@ def render_phase_learning_plots(
                     origin_clock_hour=phase_origin_hour,
                     awake_start_clock_hour=mouse_day_start_hour,
                     awake_end_clock_hour=awake_end_clock_hour,
+                    starting_day=phase_start_day,
                 )
 
             plot_phase_learning_counts_groups(
@@ -685,6 +696,7 @@ def render_phase_learning_plots(
                 origin_clock_hour=phase_origin_hour,
                 awake_start_clock_hour=mouse_day_start_hour,
                 awake_end_clock_hour=awake_end_clock_hour,
+                starting_day=phase_start_day,
             )
             plot_phase_learning_rate_groups(
                 metric_summary,
@@ -701,6 +713,7 @@ def render_phase_learning_plots(
                 origin_clock_hour=phase_origin_hour,
                 awake_start_clock_hour=mouse_day_start_hour,
                 awake_end_clock_hour=awake_end_clock_hour,
+                starting_day=phase_start_day,
             )
 
         plot_phase_learning_counts_groups(
@@ -716,6 +729,7 @@ def render_phase_learning_plots(
             origin_clock_hour=phase_origin_hour,
             awake_start_clock_hour=mouse_day_start_hour,
             awake_end_clock_hour=awake_end_clock_hour,
+            starting_day=phase_start_day,
         )
 
         if phase_number == 4:
@@ -780,6 +794,7 @@ def render_phase_learning_plots(
                         origin_clock_hour=phase_origin_hour,
                         awake_start_clock_hour=mouse_day_start_hour,
                         awake_end_clock_hour=awake_end_clock_hour,
+                        starting_day=phase_start_day,
                     )
                     plot_phase_learning_counts(
                         component_mouse,
@@ -797,6 +812,7 @@ def render_phase_learning_plots(
                         origin_clock_hour=phase_origin_hour,
                         awake_start_clock_hour=mouse_day_start_hour,
                         awake_end_clock_hour=awake_end_clock_hour,
+                        starting_day=phase_start_day,
                     )
                 plot_phase_learning_rate_groups(
                     reversal_rate_tables[component_name][1],
@@ -813,6 +829,7 @@ def render_phase_learning_plots(
                     origin_clock_hour=phase_origin_hour,
                     awake_start_clock_hour=mouse_day_start_hour,
                     awake_end_clock_hour=awake_end_clock_hour,
+                    starting_day=phase_start_day,
                 )
                 plot_phase_learning_counts_groups(
                     component_summary,
@@ -827,6 +844,7 @@ def render_phase_learning_plots(
                     origin_clock_hour=phase_origin_hour,
                     awake_start_clock_hour=mouse_day_start_hour,
                     awake_end_clock_hour=awake_end_clock_hour,
+                    starting_day=phase_start_day,
                 )
             for group_name in group_names:
                 plot_phase4_reversal_components(
@@ -841,6 +859,7 @@ def render_phase_learning_plots(
                     origin_clock_hour=phase_origin_hour,
                     awake_start_clock_hour=mouse_day_start_hour,
                     awake_end_clock_hour=awake_end_clock_hour,
+                    starting_day=phase_start_day,
                 )
 
 def render_phase_activity_plot(
@@ -882,6 +901,7 @@ def render_phase_segment_plots(
     ]
     for phase_number in (3, 4):
         phase_origin_hour = phase_origin_clock_hour(mouse_day_start_hour, scheduled_phase_start_hours[phase_number])
+        phase_start_day = experiment_day_from_scheduled_start(scheduled_phase_start_hours[phase_number])
         for success_col, title_label, ylabel in segment_metrics:
             mouse_table, summary = compute_phase_segment_rate_tables(
                 visits,
@@ -909,6 +929,7 @@ def render_phase_segment_plots(
                 ylabel=ylabel,
                 output_path=output_dir / f"phase{phase_number}_{metric_stub}_awake_sleep_segment_rate_all_groups.png",
                 spread_metric=spread_metric,
+                starting_day=phase_start_day,
             )
 
 def render_awake_day_violin_plots(
@@ -1020,6 +1041,7 @@ def render_cumulative_role_plots(
     )
     origin_clock_hour = phase_origin_clock_hour(mouse_day_start_hour, scheduled_phase_start_hours[3])
     aligned_x_start = -pre_phase_hours + (mouse_day_start_hour - origin_clock_hour)
+    cumulative_start_day = max(0, experiment_day_from_scheduled_start(scheduled_phase_start_hours[3]) - 1)
     pl_curve_mouse, _, pl_onset = compute_time_window_learning_curves(
         visits,
         phase_number=3,
@@ -1082,6 +1104,7 @@ def render_cumulative_role_plots(
             awake_end_clock_hour=awake_end_clock_hour,
             x_start_hours=aligned_x_start,
             onset_points=onset_points,
+            starting_day=cumulative_start_day,
         )
         plot_cumulative_role_curves(
             relative_summary,
@@ -1099,6 +1122,7 @@ def render_cumulative_role_plots(
             awake_end_clock_hour=awake_end_clock_hour,
             x_start_hours=aligned_x_start,
             onset_points=onset_points,
+            starting_day=cumulative_start_day,
         )
 
 def render_experience_learning_plots(
@@ -1387,6 +1411,7 @@ def run_analysis(
                 mouse_day_start_hour,
                 merged_scheduled_phase_starts[2],
             ),
+            phase_start_day=experiment_day_from_scheduled_start(merged_scheduled_phase_starts[2]),
             mouse_day_start_hour=awake_start_clock_hour,
             awake_end_clock_hour=awake_end_clock_hour,
         )

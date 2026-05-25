@@ -105,8 +105,7 @@ def _wrap_axis_label(value: str, *, width: int = 28) -> str:
         return value
     if " [" in value:
         stem, unit = value.split(" [", 1)
-        if len(stem) > width // 2:
-            return f"{stem}\n[{unit}"
+        return f"{stem}\n[{unit}"
     wrapped = textwrap.wrap(value, width=width, break_long_words=False, break_on_hyphens=False)
     return "\n".join(wrapped) if wrapped else value
 
@@ -205,10 +204,11 @@ def _add_awake_sleep_background(
     total_range = x_end - x_start
     use_short_labels = total_range >= 60.0
     label_font_size = _font_size(-2.6) if use_short_labels else _font_size(-1.8)
+    min_label_width = 5.5 if use_short_labels else 9.0
     for awake_left, awake_right in awake_intervals:
         draw_awake_left = max(awake_left, x_start)
         draw_awake_right = min(awake_right, x_end)
-        if draw_awake_right - draw_awake_left >= 5:
+        if draw_awake_right - draw_awake_left >= min_label_width:
             awake_label = "aw." if use_short_labels else "awake"
             ax.text(
                 draw_awake_left + (draw_awake_right - draw_awake_left) / 2.0,
@@ -234,7 +234,7 @@ def _add_awake_sleep_background(
                 linewidth=0,
                 zorder=0,
             )
-            if draw_sleep_right - draw_sleep_left >= 5:
+            if draw_sleep_right - draw_sleep_left >= min_label_width:
                 ax.text(
                     draw_sleep_left + (draw_sleep_right - draw_sleep_left) / 2.0,
                     label_y,
@@ -256,7 +256,7 @@ def _add_awake_sleep_background(
             linewidth=0,
             zorder=0,
         )
-        if x_end - current_left >= 5:
+        if x_end - current_left >= min_label_width:
             ax.text(
                 current_left + (x_end - current_left) / 2.0,
                 label_y,
@@ -377,6 +377,7 @@ def _add_segment_annotations(
     max_segment: int,
     phase_number: int,
     phase_display_name: str,
+    starting_day: int = 1,
 ) -> None:
     """Add awake/sleep, day, and phase annotations to segment-based plots."""
 
@@ -413,7 +414,7 @@ def _add_segment_annotations(
         ax.text(
             left + (right - left) / 2.0,
             0.88,
-            f"Day {day_index + 1}",
+            f"Day {starting_day + day_index}",
             ha="center",
             va="center",
             fontsize=_font_size(-1.2),
@@ -770,6 +771,7 @@ def plot_phase2_adaptation(
     origin_clock_hour: float = 8.0,
     awake_start_clock_hour: float = 6.0,
     awake_end_clock_hour: float = 18.0,
+    starting_day: int = 1,
 ) -> None:
     """Plot the phase-2 adaptation metric as bars or mean traces with spread."""
 
@@ -799,7 +801,7 @@ def plot_phase2_adaptation(
         awake_start_clock_hour=awake_start_clock_hour,
         awake_end_clock_hour=awake_end_clock_hour,
     )
-    _add_day_annotations(ax, x_end=max_hour, x_start=x_start, label_every_days=1, starting_day=1)
+    _add_day_annotations(ax, x_end=max_hour, x_start=x_start, label_every_days=1, starting_day=starting_day)
     _add_single_phase_band(ax, phase_number=2, label=phase_display_name, start_hours=0.0, end_hours=max_hour)
 
     if plot_style == "line":
@@ -874,6 +876,7 @@ def plot_phase_learning_counts(
     origin_clock_hour: float = 8.0,
     awake_start_clock_hour: float = 6.0,
     awake_end_clock_hour: float = 18.0,
+    starting_day: int = 1,
 ) -> None:
     """Plot one selected place-learning count metric for phase 3 or phase 4."""
 
@@ -917,7 +920,7 @@ def plot_phase_learning_counts(
         awake_start_clock_hour=awake_start_clock_hour,
         awake_end_clock_hour=awake_end_clock_hour,
     )
-    _add_day_annotations(ax, x_end=max_hour, x_start=x_start, label_every_days=1, starting_day=1)
+    _add_day_annotations(ax, x_end=max_hour, x_start=x_start, label_every_days=1, starting_day=starting_day)
     _add_single_phase_band(
         ax,
         phase_number=phase_number,
@@ -961,6 +964,7 @@ def plot_phase_learning_rate(
     origin_clock_hour: float = 8.0,
     awake_start_clock_hour: float = 6.0,
     awake_end_clock_hour: float = 18.0,
+    starting_day: int = 1,
 ) -> None:
     """Plot one selected place-learning rate metric for phase 3 or phase 4."""
 
@@ -1003,7 +1007,7 @@ def plot_phase_learning_rate(
         awake_start_clock_hour=awake_start_clock_hour,
         awake_end_clock_hour=awake_end_clock_hour,
     )
-    _add_day_annotations(ax, x_end=max_hour, x_start=x_start, label_every_days=1, starting_day=1)
+    _add_day_annotations(ax, x_end=max_hour, x_start=x_start, label_every_days=1, starting_day=starting_day)
     _add_single_phase_band(
         ax,
         phase_number=phase_number,
@@ -1055,6 +1059,7 @@ def plot_phase_learning_rate_groups(
     origin_clock_hour: float = 8.0,
     awake_start_clock_hour: float = 6.0,
     awake_end_clock_hour: float = 18.0,
+    starting_day: int = 1,
 ) -> None:
     """Plot one selected place-learning rate metric across all pathology groups."""
 
@@ -1076,7 +1081,7 @@ def plot_phase_learning_rate_groups(
         awake_start_clock_hour=awake_start_clock_hour,
         awake_end_clock_hour=awake_end_clock_hour,
     )
-    _add_day_annotations(ax, x_end=max_hour, x_start=x_start, label_every_days=1, starting_day=1)
+    _add_day_annotations(ax, x_end=max_hour, x_start=x_start, label_every_days=1, starting_day=starting_day)
     _add_single_phase_band(
         ax,
         phase_number=phase_number,
@@ -1129,6 +1134,7 @@ def plot_phase_learning_counts_groups(
     origin_clock_hour: float = 8.0,
     awake_start_clock_hour: float = 6.0,
     awake_end_clock_hour: float = 18.0,
+    starting_day: int = 1,
 ) -> None:
     """Plot all pathology-group correct-visit counts in one figure."""
 
@@ -1151,7 +1157,7 @@ def plot_phase_learning_counts_groups(
         awake_start_clock_hour=awake_start_clock_hour,
         awake_end_clock_hour=awake_end_clock_hour,
     )
-    _add_day_annotations(ax, x_end=max_hour, x_start=x_start, label_every_days=1, starting_day=1)
+    _add_day_annotations(ax, x_end=max_hour, x_start=x_start, label_every_days=1, starting_day=starting_day)
     phase_number = 3 if phase_display_name == "PL" else 4 if phase_display_name == "PR" else 3
     _add_single_phase_band(
         ax,
@@ -1294,6 +1300,7 @@ def plot_phase4_reversal_components(
     origin_clock_hour: float = 8.0,
     awake_start_clock_hour: float = 6.0,
     awake_end_clock_hour: float = 18.0,
+    starting_day: int = 1,
 ) -> None:
     """Plot new-correct, previous-correct, and neutral-corner visit rates for reversal."""
 
@@ -1330,7 +1337,7 @@ def plot_phase4_reversal_components(
         awake_start_clock_hour=awake_start_clock_hour,
         awake_end_clock_hour=awake_end_clock_hour,
     )
-    _add_day_annotations(ax, x_end=max_hour, x_start=x_start, label_every_days=1, starting_day=1)
+    _add_day_annotations(ax, x_end=max_hour, x_start=x_start, label_every_days=1, starting_day=starting_day)
     _add_single_phase_band(ax, phase_number=4, label=phase_display_name, start_hours=0.0, end_hours=max_hour)
 
     for component_name, group_summary in prepared.items():
@@ -1362,6 +1369,7 @@ def plot_phase_segment_rate_groups(
     output_path: Path,
     spread_metric: str,
     add_zero_start: bool = True,
+    starting_day: int = 1,
 ) -> None:
     """Plot group mean rates across awake/sleep segments within one phase."""
 
@@ -1407,10 +1415,11 @@ def plot_phase_segment_rate_groups(
         max_segment=max_segment,
         phase_number=phase_number,
         phase_display_name=phase_display_name,
+        starting_day=starting_day,
     )
     tick_positions = [0.0] + [position - 0.5 for position in range(1, max_segment + 1)]
     tick_labels = ["start"] + [
-        summary_bins.loc[summary_bins["segment_order"].eq(position), "segment_label"].iloc[0].replace("Day ", "D")
+        f"D{starting_day + ((position - 1) // 2)} {'awake' if position % 2 == 1 else 'sleep'}"
         for position in range(1, max_segment + 1)
     ]
     ax.set_xticks(tick_positions)
@@ -1509,6 +1518,7 @@ def plot_group_day_violin(
     ax.set_xticklabels(group_order, rotation=25, ha="right")
     _format_rate_axis(ax, ylabel=ylabel)
     ax.set_title(f"{_title_start(metric_title)}\n{phase_display_name} day {phase_day} awake")
+    ax.axhline(25.0, color="#4f4f4f", linestyle="--", linewidth=1.0, zorder=1)
     ax.grid(False)
     ax.spines["left"].set_visible(False)
     ax.spines["bottom"].set_visible(False)
@@ -1516,18 +1526,19 @@ def plot_group_day_violin(
     significant_pairs = pairwise_stats.loc[
         pairwise_stats["phase_day"].eq(phase_day) & pairwise_stats["p_value"].lt(0.05)
     ].copy()
-    y_base = 102.0
-    y_step = 8.0
-    y_limit = 120.0
+    y_data_max = float(max(100.0, panel["value"].dropna().max() * 100.0 if panel["value"].notna().any() else 100.0))
+    y_base = max(104.0, y_data_max + 5.0)
+    y_step = 10.0
+    y_limit = 124.0
     for pair_index, (_, row) in enumerate(significant_pairs.iterrows()):
         left = group_order.index(str(row["group1"])) + 1
         right = group_order.index(str(row["group2"])) + 1
         line_y = y_base + pair_index * y_step
-        y_limit = max(y_limit, line_y + 6.0)
-        ax.plot([left, left, right, right], [line_y - 0.8, line_y, line_y, line_y - 0.8], color="#444444", linewidth=1.0)
+        y_limit = max(y_limit, line_y + 7.0)
+        ax.plot([left, left, right, right], [line_y - 1.1, line_y, line_y, line_y - 1.1], color="#444444", linewidth=1.0)
         ax.text(
             (left + right) / 2.0,
-            line_y + 1.0,
+            line_y + 1.8,
             f"p={float(row['p_value']):.3g}",
             ha="center",
             va="bottom",
@@ -1535,14 +1546,15 @@ def plot_group_day_violin(
             color="#444444",
         )
 
+    chance_star_y = max(116.0, y_base + len(significant_pairs) * y_step + 3.5)
     for position, group_name in zip(positions, group_order):
         chance_row = chance_stats.loc[
             chance_stats["phase_day"].eq(phase_day) & chance_stats["Group"].astype(str).eq(group_name)
         ]
         if not chance_row.empty and float(chance_row["p_value"].iloc[0]) < 0.05:
-            ax.text(position, 117.0, "*", ha="center", va="center", fontsize=_font_size(6.0), color="#222222")
+            ax.text(position, chance_star_y, "*", ha="center", va="center", fontsize=_font_size(6.0), color="#222222")
 
-    ax.set_ylim(0, y_limit)
+    ax.set_ylim(0, max(y_limit, chance_star_y + 6.0))
     _save_figure(fig, output_path)
 
 def plot_cumulative_role_curves(
@@ -1562,6 +1574,7 @@ def plot_cumulative_role_curves(
     awake_end_clock_hour: float,
     x_start_hours: float | None = None,
     onset_points: list[dict[str, float | str]] | None = None,
+    starting_day: int = 1,
 ) -> None:
     """Plot cumulative role-based corner trajectories for one pathology group."""
 
@@ -1590,7 +1603,7 @@ def plot_cumulative_role_curves(
         awake_start_clock_hour=awake_start_clock_hour,
         awake_end_clock_hour=awake_end_clock_hour,
     )
-    _add_day_annotations(ax, x_end=max_hour, x_start=x_start, label_every_days=1, starting_day=1)
+    _add_day_annotations(ax, x_end=max_hour, x_start=x_start, label_every_days=1, starting_day=starting_day)
     _add_phase_band(ax, phase_window_table, phase_display_names=phase_display_names)
 
     for role_name, role_summary in group_summary.groupby("corner_role", observed=True):
