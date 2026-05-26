@@ -103,16 +103,16 @@ DEFAULT_GROUP_COLORS = {
     "Tau 1-441": "#4ade80",
 }
 DEFAULT_FIGSIZE_CM = {# always a pair of (width, height)
-    "LONG_FIGSIZE_CM":          (18.2, 7.4),
-    "LONG_FIGSIZE_2_CM":        (15.2, 7.4),
-    "PHASE2_FIGSIZE_CM":        (10.4, 7.0),
+    "LONG_FIGSIZE_CM":          (24, 10.0), # (18.2, 7.4),
+    "LONG_FIGSIZE_2_CM":        (24, 10.0), #(15.2, 7.4),
+    "PHASE2_FIGSIZE_CM":        (15.0, 10.0), #(10.4, 7.0),
     "MEDIUM_FIGSIZE_CM":        (11.8, 7.6),
     "MEDIUM_WIDE_FIGSIZE_CM":   (12.8, 8.0),
-    "SEGMENT_FIGSIZE_CM":       (12.6, 7.9),
-    "VIOLIN_FIGSIZE_CM":        (3.8, 7.2), #(5.8, 7.2),
-    "ONSET_FIGSIZE_CM":         (5.8, 7.0),
+    "SEGMENT_FIGSIZE_CM":       (18.0, 11.0), #(12.6, 7.9),
+    "VIOLIN_FIGSIZE_CM":        (5.8, 10), #(5.8, 7.2),
+    "ONSET_FIGSIZE_CM":         (5.8, 10), #(5.8, 7.0),
     "ACTIVITY_FIGSIZE_CM":      (8.8, 8.1),
-    "WIDE_GROUP_FIGSIZE_CM":    (18.2, 7.4),
+    "WIDE_GROUP_FIGSIZE_CM":    (27, 10.0),#(18.2, 7.4),
 }
 DEFAULT_PHASE2_PLOT_STYLE = "line"
 DEFAULT_MOUSE_DAY_START_HOUR = 6.0
@@ -139,7 +139,7 @@ USER_FIGSIZE_CM = DEFAULT_FIGSIZE_CM.copy()
 USER_MOUSE_DAY_START_HOUR = DEFAULT_MOUSE_DAY_START_HOUR
 USER_AWAKE_DURATION_HOURS = DEFAULT_AWAKE_DURATION_HOURS
 USER_SCHEDULED_PHASE_START_HOURS = DEFAULT_SCHEDULED_PHASE_START_HOURS.copy()
-USER_BASE_FONT_SIZE = 10.0
+USER_BASE_FONT_SIZE = 15 #10.0
 USER_EXCLUDE_VIOLIN_OUTLIERS = True
 USER_RATE_THRESHOLD_PCTS = [50.0, 60.0, 70.0, 80.0]
 USER_THRESHOLD_ONSET_BIN_HOURS = 1
@@ -1774,14 +1774,43 @@ def render_rate_threshold_onset_plots(
 ) -> None:
     """Render violin plots for first threshold crossing of binned learning rates."""
 
+    def _shared_onset_ylim(
+        flagged_tables: list[pd.DataFrame],
+        pairwise_tables: list[pd.DataFrame],
+    ) -> tuple[float, float]:
+        """Compute one shared onset y-limit across matching PL/PR panels."""
+
+        non_empty = [frame for frame in flagged_tables if not frame.empty and frame["onset_hours"].notna().any()]
+        if not non_empty:
+            return (0.0, 1.0)
+        combined = pd.concat(non_empty, ignore_index=True)
+        y_max = float(combined["onset_hours"].max())
+        y_min = float(min(0.0, combined["onset_hours"].min()))
+        data_span = max(1.0, y_max - y_min)
+        significant_pair_count = 0
+        for pairwise in pairwise_tables:
+            if pairwise is None or pairwise.empty or "p_value" not in pairwise.columns:
+                continue
+            significant_pair_count = max(significant_pair_count, int(pairwise["p_value"].lt(0.05).sum()))
+        if significant_pair_count > 0:
+            base_y = y_max + data_span * 0.12
+            step_y = data_span * 0.10
+            top = base_y + max(1, significant_pair_count) * step_y + data_span * 0.08
+        else:
+            top = max(y_max * 1.05, y_max + data_span * 0.08, 1.0)
+        return (0.0, float(top))
+
     metric_specs = [
         ("correct_corner_visit", "correct_corner", "correct-corner visit rate"),
         ("correct_np_visit", "correct_np", "correct NP visit rate"),
         ("rewarded_correct_corner_visit", "rewarded_correct_corner", "rewarded correct-corner visit rate"),
     ]
-    for phase_number in (3, 4):
-        for success_col, metric_stub, title_label in metric_specs:
-            for threshold_pct in threshold_pcts:
+    for success_col, metric_stub, title_label in metric_specs:
+        for threshold_pct in threshold_pcts:
+            phase_payloads: dict[int, tuple[pd.DataFrame, pd.DataFrame]] = {}
+            flagged_tables: list[pd.DataFrame] = []
+            pairwise_tables: list[pd.DataFrame] = []
+            for phase_number in (3, 4):
                 threshold_tag = f"{int(threshold_pct)}pct"
                 onset_table = compute_rate_threshold_onset_table(
                     visits,
@@ -1820,6 +1849,14 @@ def render_rate_threshold_onset_plots(
                     pairwise,
                     output_dir / f"phase{phase_number}_{metric_stub}_{bin_hours}h_threshold_onset_{threshold_tag}_pairwise_stats.tsv",
                 )
+                phase_payloads[phase_number] = (flagged, pairwise)
+                flagged_tables.append(flagged)
+                pairwise_tables.append(pairwise)
+            shared_ylim = _shared_onset_ylim(flagged_tables, pairwise_tables)
+            for phase_number in (3, 4):
+                if phase_number not in phase_payloads:
+                    continue
+                flagged, pairwise = phase_payloads[phase_number]
                 plot_onset_violin(
                     flagged,
                     onset_col="onset_hours",
@@ -1829,6 +1866,7 @@ def render_rate_threshold_onset_plots(
                     output_path=output_dir / f"phase{phase_number}_{metric_stub}_{bin_hours}h_threshold_onset_{threshold_tag}_violin.png",
                     pairwise_stats=pairwise,
                     outlier_col="is_outlier",
+                    y_limits=shared_ylim,
                 )
 
 def render_count_model_and_responder_analyses(

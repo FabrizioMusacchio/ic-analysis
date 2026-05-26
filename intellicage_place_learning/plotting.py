@@ -183,8 +183,8 @@ def _save_figure(fig: plt.Figure, output_path: Path) -> None:
     pdf_output_path = output_path.parent / "pdf" / f"{output_path.stem}.pdf"
     _prepare_output_path(pdf_output_path)
     fig.tight_layout()
-    fig.savefig(output_path, dpi=300, bbox_inches="tight")
-    fig.savefig(pdf_output_path, bbox_inches="tight")
+    fig.savefig(output_path, dpi=300, bbox_inches="tight", transparent=True)
+    fig.savefig(pdf_output_path, bbox_inches="tight", transparent=True)
     plt.close(fig)
 
 def sanitize_filename_part(value: str) -> str:
@@ -1759,6 +1759,7 @@ def plot_onset_violin(
     pairwise_stats: pd.DataFrame | None = None,
     outlier_col: str = "is_outlier",
     reference_line: float | None = None,
+    y_limits: tuple[float, float] | None = None,
 ) -> None:
     """Plot onset distributions per group as violins with point overlays."""
 
@@ -1854,7 +1855,17 @@ def plot_onset_violin(
                     fontsize=_font_size(-2.0),
                     color="#444444",
                 )
-            ax.set_ylim(bottom=ax.get_ylim()[0], top=base_y + max(1, len(significant_pairs)) * step_y + data_span * 0.08)
+            computed_top = base_y + max(1, len(significant_pairs)) * step_y + data_span * 0.08
+            current_bottom = ax.get_ylim()[0]
+            if y_limits is None:
+                ax.set_ylim(bottom=current_bottom, top=computed_top)
+            else:
+                ax.set_ylim(bottom=float(y_limits[0]), top=max(float(y_limits[1]), computed_top))
+            _save_figure(fig, output_path)
+            return
+
+    if y_limits is not None:
+        ax.set_ylim(float(y_limits[0]), float(y_limits[1]))
 
     _save_figure(fig, output_path)
 
