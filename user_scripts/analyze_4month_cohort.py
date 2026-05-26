@@ -12,6 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
@@ -27,6 +28,7 @@ from intellicage_place_learning.metrics import (
     compute_awake_day_rate_tables,
     compute_awake_day_ratio_tables,
     compute_binomial_glm_group_statistics,
+    compute_clustered_binomial_gee_group_statistics,
     compute_experiment_drinking_visit_bins,
     compute_experiment_lick_count_bins,
     compute_experiment_nosepoke_count_bins,
@@ -143,6 +145,10 @@ USER_RATE_THRESHOLD_PCTS = [50.0, 60.0, 70.0, 80.0]
 USER_THRESHOLD_ONSET_BIN_HOURS = 1
 USER_RESPONDER_HORIZONS_HOURS = [24.0, 48.0, 72.0]
 USER_BINOMIAL_MODEL_FIRST_HOURS = 24.0
+USER_SUMMARY_COMPARISON_GROUPS = ("tdTomato", "Tau 1-441")
+USER_SUMMARY_RESPONDER_HORIZON_HOURS = 24.0
+USER_SUMMARY_FIGSIZE_CM = (8.2, 7.1)
+CM_TO_INCH = 2.54
 # %% FUNCTIONS
 def parse_numeric_mapping(raw_items: list[str]) -> dict[int, float]:
     """Parse `key=value` CLI strings into a numeric dictionary."""
@@ -235,6 +241,36 @@ def csv_output_path(output_path: Path) -> Path:
 
     return output_path.parent / "csv" / output_path.name
 
+def _summary_output_paths(output_root: Path, stem: str) -> tuple[Path, Path]:
+    """Return the PNG and PDF destinations for one summary figure stem."""
+
+    png_path = output_root / f"{stem}.png"
+    pdf_path = output_root / "pdf" / f"{stem}.pdf"
+    pdf_path.parent.mkdir(parents=True, exist_ok=True)
+    return png_path, pdf_path
+
+def _load_result_table(output_root: Path, filename: str) -> pd.DataFrame:
+    """Load one tab-separated result table from the standardized CSV folder."""
+
+    table_path = output_root / "csv" / filename
+    if not table_path.exists():
+        raise FileNotFoundError(f"Expected result table not found: {table_path}")
+    return pd.read_csv(table_path, sep="\t")
+
+def _load_binned_result_table(output_root: Path, *, bin_hours: int, filename: str) -> pd.DataFrame:
+    """Load one result table from a bin-specific CSV subfolder."""
+
+    table_path = output_root / f"{int(bin_hours)}h_bins" / "csv" / filename
+    if not table_path.exists():
+        raise FileNotFoundError(f"Expected binned result table not found: {table_path}")
+    return pd.read_csv(table_path, sep="\t")
+
+def _ordered_available_groups(frame: pd.DataFrame, preferred_order: tuple[str, ...] | list[str]) -> tuple[str, ...]:
+    """Return preferred groups that are actually present in one result table."""
+
+    present = set(frame["Group"].astype(str))
+    return tuple(group_name for group_name in preferred_order if group_name in present)
+
 def apply_group_preferences(
     visits: pd.DataFrame,
     metadata: pd.DataFrame,
@@ -287,6 +323,407 @@ def apply_group_preferences(
         validate="many_to_one",
     )
     return visits, metadata, nosepokes
+
+def _draw_distribution_panel(
+    ax: plt.Axes,
+    data: pd.DataFrame,
+    *,
+    value_col: str,
+    group_order: tuple[str, ...] | list[str],
+    group_colors: dict[str, str],
+    title: str,
+    ylabel: str,
+    pairwise_stats: pd.DataFrame | None = None,
+    pairwise_filter_column: str | None = None,
+    pairwise_filter_value: object | None = None,
+    as_percent: bool = True,
+    reference_line: float | None = None,
+) -> None:
+    """Draw one compact distribution panel with points and violin summaries."""
+
+    panel = data.loc[data["Group"].isin(group_order)].copy()
+    if panel.empty:
+        ax.set_axis_off()
+        return
+
+    value_scale = 100.0 if as_percent else 1.0
+    positions = np.arange(1, len(group_order) + 1)
+    violin_data = [
+        panel.loc[panel["Group"].astype(str).eq(group_name), value_col].dropna().to_numpy(dtype=float) * value_scale
+        for group_name in group_order
+    ]
+    violins = ax.violinplot(violin_data, positions=positions, widths=0.72, showmeans=False, showmedians=True)
+    for body, group_name in zip(violins["bodies"], group_order):
+        body.set_facecolor(group_colors[group_name])
+        body.set_edgecolor("none")
+        body.set_linewidth(0.0)
+        body.set_alpha(0.25)
+    for key in ("cbars", "cmins", "cmaxes", "cmedians"):
+        if key in violins:
+            violins[key].set_color("#555555")
+            violins[key].set_linewidth(1.0)
+
+    for position, group_name, values in zip(positions, group_order, violin_data):
+        jitter = np.linspace(-0.10, 0.10, len(values)) if len(values) > 1 else np.array([0.0])
+        ax.scatter(
+            np.full(len(values), position) + jitter,
+            values,
+            s=24,
+            color=group_colors[group_name],
+            edgecolor="none",
+            zorder=3,
+            alpha=0.9,
+        )
+
+    if reference_line is not None:
+        ref_value = float(reference_line) * value_scale if as_percent else float(reference_line)
+        ax.axhline(ref_value, color="#4f4f4f", linestyle="--", linewidth=1.0, zorder=1)
+
+    ax.set_xticks(positions)
+    ax.set_xticklabels(group_order, rotation=25, ha="right")
+    ax.set_ylabel(ylabel)
+    ax.set_title(title, fontsize=plt.rcParams["axes.titlesize"])
+    ax.grid(False)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_visible(False)
+    ax.spines["bottom"].set_visible(False)
+
+    numeric_values = (
+        np.concatenate([values for values in violin_data if len(values) > 0])
+        if any(len(values) > 0 for values in violin_data)
+        else np.array([0.0])
+    )
+    y_max = float(np.nanmax(numeric_values)) if numeric_values.size else 1.0
+    default_min = 100.0 if as_percent else 1.0
+    y_data_max = float(max(default_min, y_max))
+    y_base = max(
+        (104.0 if as_percent else y_data_max * 1.05),
+        y_data_max + (5.0 if as_percent else max(0.1, y_data_max * 0.08)),
+    )
+    y_step = 10.0 if as_percent else max(0.12, y_data_max * 0.10)
+    y_limit = 124.0 if as_percent else max(1.25, y_base + 0.4)
+
+    significant_pairs = pd.DataFrame()
+    if pairwise_stats is not None and not pairwise_stats.empty and {"group1", "group2", "p_value"}.issubset(pairwise_stats.columns):
+        significant_pairs = pairwise_stats.copy()
+        if pairwise_filter_column is not None and pairwise_filter_column in significant_pairs.columns:
+            significant_pairs = significant_pairs.loc[
+                significant_pairs[pairwise_filter_column].eq(pairwise_filter_value)
+            ].copy()
+        significant_pairs = significant_pairs.loc[
+            significant_pairs["group1"].astype(str).isin(group_order)
+            & significant_pairs["group2"].astype(str).isin(group_order)
+            & significant_pairs["p_value"].lt(0.05)
+        ].copy()
+        significant_pairs["left_pos"] = significant_pairs["group1"].astype(str).map(
+            {group: idx + 1 for idx, group in enumerate(group_order)}
+        )
+        significant_pairs["right_pos"] = significant_pairs["group2"].astype(str).map(
+            {group: idx + 1 for idx, group in enumerate(group_order)}
+        )
+        significant_pairs["span"] = (significant_pairs["right_pos"] - significant_pairs["left_pos"]).abs()
+        significant_pairs = significant_pairs.sort_values(["span", "left_pos", "right_pos"]).reset_index(drop=True)
+        for pair_index, (_, row) in enumerate(significant_pairs.iterrows()):
+            left = int(min(row["left_pos"], row["right_pos"]))
+            right = int(max(row["left_pos"], row["right_pos"]))
+            line_y = y_base + pair_index * y_step
+            y_limit = max(y_limit, line_y + 7.0)
+            ax.plot([left, left, right, right], [line_y - 1.1, line_y, line_y, line_y - 1.1], color="#444444", linewidth=1.0)
+            ax.text(
+                (left + right) / 2.0,
+                line_y + (1.8 if as_percent else max(0.04, y_step * 0.18)),
+                f"p={float(row['p_value']):.3g}",
+                ha="center",
+                va="bottom",
+                fontsize=max(6.0, float(plt.rcParams["font.size"]) - 2.0),
+                color="#444444",
+            )
+
+    if as_percent:
+        ax.set_ylim(0, max(y_limit, 105.0))
+    else:
+        ax.set_ylim(0, max(y_limit, 1.05, y_max * 1.18))
+
+def _draw_responder_panel(
+    ax: plt.Axes,
+    data: pd.DataFrame,
+    *,
+    group_order: tuple[str, ...] | list[str],
+    threshold_pcts: list[float] | tuple[float, ...],
+    group_colors: dict[str, str],
+    title: str,
+    ylabel: str,
+) -> None:
+    """Draw one responder-rate summary panel across thresholds."""
+
+    panel = data.loc[data["Group"].isin(group_order)].copy()
+    if panel.empty:
+        ax.set_axis_off()
+        return
+
+    for group_name in group_order:
+        group_frame = panel.loc[panel["Group"].astype(str).eq(group_name)].copy()
+        if group_frame.empty:
+            continue
+        group_frame = group_frame.sort_values("threshold_pct")
+        ax.plot(
+            group_frame["threshold_pct"].to_numpy(dtype=float),
+            group_frame["responder_rate"].to_numpy(dtype=float) * 100.0,
+            marker="o",
+            linewidth=1.2,
+            markersize=4.5,
+            color=group_colors[group_name],
+            label=group_name,
+        )
+    ax.set_title(title)
+    ax.set_xlabel("Threshold [%]")
+    ax.set_ylabel(ylabel)
+    ax.set_xticks(list(threshold_pcts))
+    ax.set_ylim(0, 105)
+    ax.grid(axis="y", alpha=0.20)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.legend(frameon=False, loc="upper right")
+
+def _save_panel_figure(
+    output_root: Path,
+    stem: str,
+    draw_fn,
+) -> None:
+    """Create and save one single-panel summary figure."""
+
+    fig, ax = plt.subplots(
+        1,
+        1,
+        figsize=(USER_SUMMARY_FIGSIZE_CM[0] / CM_TO_INCH, USER_SUMMARY_FIGSIZE_CM[1] / CM_TO_INCH),
+    )
+    draw_fn(ax)
+    png_path, pdf_path = _summary_output_paths(output_root, stem)
+    fig.tight_layout()
+    fig.savefig(png_path, dpi=300, bbox_inches="tight")
+    fig.savefig(pdf_path, bbox_inches="tight")
+    plt.close(fig)
+
+def _build_pl_rewarded_gee_stats(
+    output_root: Path,
+    *,
+    awake_duration_hours: float,
+    bin_hours: int = 1,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Compute and save mouse-clustered GEE stats for early PL rewarded-correct rates."""
+
+    hourly = _load_binned_result_table(
+        output_root,
+        bin_hours=bin_hours,
+        filename="phase3_rewarded_correct_corner_visit_rate_mouse_bins_1h.tsv",
+    )
+    hourly = hourly.loc[hourly["all_visits"].fillna(0).gt(0)].copy()
+
+    day1_awake = hourly.loc[
+        hourly["bin_start_hours"].ge(0.0)
+        & hourly["bin_start_hours"].lt(float(awake_duration_hours))
+    ].copy()
+    first24h = hourly.loc[
+        hourly["bin_start_hours"].ge(0.0)
+        & hourly["bin_start_hours"].lt(24.0)
+    ].copy()
+
+    day1_omnibus, day1_pairwise = compute_clustered_binomial_gee_group_statistics(
+        day1_awake,
+        phase_number=3,
+        metric_name=f"rewarded_correct_corner_day1awake_gee_{int(bin_hours)}h",
+        success_col="correct_visits",
+        total_col="all_visits",
+    )
+    first24_omnibus, first24_pairwise = compute_clustered_binomial_gee_group_statistics(
+        first24h,
+        phase_number=3,
+        metric_name=f"rewarded_correct_corner_first24h_gee_{int(bin_hours)}h",
+        success_col="correct_visits",
+        total_col="all_visits",
+    )
+
+    save_table(day1_awake, output_root / f"phase3_rewarded_correct_corner_day1awake_gee_{int(bin_hours)}h_mouse_bins.tsv")
+    save_table(day1_omnibus, output_root / f"phase3_rewarded_correct_corner_day1awake_gee_{int(bin_hours)}h_omnibus_stats.tsv")
+    save_table(day1_pairwise, output_root / f"phase3_rewarded_correct_corner_day1awake_gee_{int(bin_hours)}h_pairwise_stats.tsv")
+    save_table(first24h, output_root / f"phase3_rewarded_correct_corner_first24h_gee_{int(bin_hours)}h_mouse_bins.tsv")
+    save_table(first24_omnibus, output_root / f"phase3_rewarded_correct_corner_first24h_gee_{int(bin_hours)}h_omnibus_stats.tsv")
+    save_table(first24_pairwise, output_root / f"phase3_rewarded_correct_corner_first24h_gee_{int(bin_hours)}h_pairwise_stats.tsv")
+    return day1_omnibus, day1_pairwise, first24_omnibus, first24_pairwise
+
+def render_target_group_summary_panels(
+    *,
+    output_root: Path,
+    comparison_groups: tuple[str, str],
+    all_groups_order: tuple[str, ...],
+    threshold_pcts: list[float] | tuple[float, ...],
+    responder_horizon_hours: float,
+    group_colors: dict[str, str],
+    awake_duration_hours: float,
+) -> None:
+    """Render single-panel summary figures for targeted and all-group views."""
+
+    group_a, group_b = comparison_groups
+    rewarded_day1 = _load_result_table(output_root, "phase3_rewarded_correct_corner_awake_day_rate_mouse.tsv")
+    rewarded_day1 = rewarded_day1.loc[rewarded_day1["phase_day"].eq(1)].copy()
+    rewarded_day1_omnibus, rewarded_day1_stats, first24h_omnibus, first24h_stats = _build_pl_rewarded_gee_stats(
+        output_root,
+        awake_duration_hours=awake_duration_hours,
+        bin_hours=1,
+    )
+
+    first24h = _load_result_table(output_root, "phase3_rewarded_correct_corner_first24h_count_model_mouse.tsv")
+
+    reversal_pref = _load_result_table(output_root, "phase4_reversal_preference_index_awake_day_rate_mouse.tsv")
+    reversal_pref = reversal_pref.loc[reversal_pref["phase_day"].eq(3)].copy()
+    reversal_pref_stats = _load_result_table(output_root, "phase4_reversal_preference_index_awake_day_rate_pairwise_stats.tsv")
+
+    responder_frames: list[pd.DataFrame] = []
+    for threshold_pct in threshold_pcts:
+        frame = _load_result_table(
+            output_root,
+            f"phase3_rewarded_correct_corner_1h_threshold_responder_{int(threshold_pct)}pct_summary.tsv",
+        )
+        frame = frame.loc[frame["horizon_hours"].eq(float(responder_horizon_hours))].copy()
+        responder_frames.append(frame)
+    responder_summary = pd.concat(responder_frames, ignore_index=True) if responder_frames else pd.DataFrame()
+
+    comparison_rewarded = _ordered_available_groups(rewarded_day1, comparison_groups)
+    all_rewarded = _ordered_available_groups(rewarded_day1, all_groups_order)
+    comparison_first24h = _ordered_available_groups(first24h, comparison_groups)
+    all_first24h = _ordered_available_groups(first24h, all_groups_order)
+    comparison_reversal = _ordered_available_groups(reversal_pref, comparison_groups)
+    all_reversal = _ordered_available_groups(reversal_pref, all_groups_order)
+    comparison_responder = _ordered_available_groups(responder_summary, comparison_groups)
+    all_responder = _ordered_available_groups(responder_summary, all_groups_order)
+
+    _save_panel_figure(
+        output_root,
+        f"{group_a}_vs_{group_b}_pl_day1_awake_rewarded_correct_corner".replace(" ", "_"),
+        lambda ax: _draw_distribution_panel(
+            ax,
+            rewarded_day1,
+            value_col="value",
+            group_order=comparison_rewarded,
+            group_colors=group_colors,
+            title="PL day 1 awake\nRewarded correct-corner rate",
+            ylabel="Rewarded correct-corner rate [%]",
+            pairwise_stats=rewarded_day1_stats,
+            as_percent=True,
+            reference_line=0.25,
+        ),
+    )
+    _save_panel_figure(
+        output_root,
+        "all_groups_pl_day1_awake_rewarded_correct_corner",
+        lambda ax: _draw_distribution_panel(
+            ax,
+            rewarded_day1,
+            value_col="value",
+            group_order=all_rewarded,
+            group_colors=group_colors,
+            title="PL day 1 awake\nRewarded correct-corner rate",
+            ylabel="Rewarded correct-corner rate [%]",
+            pairwise_stats=rewarded_day1_stats,
+            as_percent=True,
+            reference_line=0.25,
+        ),
+    )
+    _save_panel_figure(
+        output_root,
+        f"{group_a}_vs_{group_b}_pl_first24h_rewarded_correct_corner".replace(" ", "_"),
+        lambda ax: _draw_distribution_panel(
+            ax,
+            first24h,
+            value_col="value",
+            group_order=comparison_first24h,
+            group_colors=group_colors,
+            title="PL first 24 h\nRewarded correct-corner rate",
+            ylabel="Rewarded correct-corner rate [%]",
+            pairwise_stats=first24h_stats,
+            as_percent=True,
+            reference_line=0.25,
+        ),
+    )
+    _save_panel_figure(
+        output_root,
+        "all_groups_pl_first24h_rewarded_correct_corner",
+        lambda ax: _draw_distribution_panel(
+            ax,
+            first24h,
+            value_col="value",
+            group_order=all_first24h,
+            group_colors=group_colors,
+            title="PL first 24 h\nRewarded correct-corner rate",
+            ylabel="Rewarded correct-corner rate [%]",
+            pairwise_stats=first24h_stats,
+            as_percent=True,
+            reference_line=0.25,
+        ),
+    )
+    _save_panel_figure(
+        output_root,
+        f"{group_a}_vs_{group_b}_pl_responders_{int(responder_horizon_hours)}h".replace(" ", "_"),
+        lambda ax: _draw_responder_panel(
+            ax,
+            responder_summary,
+            group_order=comparison_responder,
+            threshold_pcts=threshold_pcts,
+            group_colors=group_colors,
+            title=f"PL responders by {int(responder_horizon_hours)} h",
+            ylabel="Responder rate [%]",
+        ),
+    )
+    _save_panel_figure(
+        output_root,
+        f"all_groups_pl_responders_{int(responder_horizon_hours)}h",
+        lambda ax: _draw_responder_panel(
+            ax,
+            responder_summary,
+            group_order=all_responder,
+            threshold_pcts=threshold_pcts,
+            group_colors=group_colors,
+            title=f"PL responders by {int(responder_horizon_hours)} h",
+            ylabel="Responder rate [%]",
+        ),
+    )
+    _save_panel_figure(
+        output_root,
+        f"{group_a}_vs_{group_b}_pr_day3_reversal_preference_index".replace(" ", "_"),
+        lambda ax: _draw_distribution_panel(
+            ax,
+            reversal_pref,
+            value_col="value",
+            group_order=comparison_reversal,
+            group_colors=group_colors,
+            title="PR day 3 awake\nReversal preference index",
+            ylabel="New / (new + previous)\n(higher = better)",
+            pairwise_stats=reversal_pref_stats,
+            pairwise_filter_column="phase_day",
+            pairwise_filter_value=3,
+            as_percent=False,
+            reference_line=0.5,
+        ),
+    )
+    _save_panel_figure(
+        output_root,
+        "all_groups_pr_day3_reversal_preference_index",
+        lambda ax: _draw_distribution_panel(
+            ax,
+            reversal_pref,
+            value_col="value",
+            group_order=all_reversal,
+            group_colors=group_colors,
+            title="PR day 3 awake\nReversal preference index",
+            ylabel="New / (new + previous)\n(higher = better)",
+            pairwise_stats=reversal_pref_stats,
+            pairwise_filter_column="phase_day",
+            pairwise_filter_value=3,
+            as_percent=False,
+            reference_line=0.5,
+        ),
+    )
 
 def render_overview_plots(
     visits,
@@ -2047,7 +2484,7 @@ def run_analysis(
 def main() -> None:
     """Run the full 4-month place-learning workflow from in-script settings."""
 
-    run_analysis(
+    output_root = run_analysis(
         dataset_root=USER_DATASET_ROOT,
         results_subdir=USER_RESULTS_SUBDIR,
         bin_hours=USER_BIN_HOURS,
@@ -2069,6 +2506,23 @@ def main() -> None:
         threshold_onset_bin_hours=USER_THRESHOLD_ONSET_BIN_HOURS,
         responder_horizons_hours=USER_RESPONDER_HORIZONS_HOURS,
         binomial_model_first_hours=USER_BINOMIAL_MODEL_FIRST_HOURS,
+    )
+    all_groups_order = tuple(
+        group_name
+        for group_name in USER_GROUP_RENAMES.values()
+        if group_name not in set(USER_EXCLUDED_GROUPS)
+    )
+    render_target_group_summary_panels(
+        output_root=output_root,
+        comparison_groups=USER_SUMMARY_COMPARISON_GROUPS,
+        all_groups_order=all_groups_order,
+        threshold_pcts=USER_RATE_THRESHOLD_PCTS,
+        responder_horizon_hours=USER_SUMMARY_RESPONDER_HORIZON_HOURS,
+        group_colors=resolved_group_colors(
+            group_renames=USER_GROUP_RENAMES,
+            group_colors=USER_GROUP_COLORS,
+        ),
+        awake_duration_hours=USER_AWAKE_DURATION_HOURS,
     )
 
 # %% ENTRY POINT

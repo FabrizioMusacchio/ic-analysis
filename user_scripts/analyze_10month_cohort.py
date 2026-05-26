@@ -667,7 +667,6 @@ def render_target_group_summary_panels(
     first24h = _load_result_table(output_root, "phase3_rewarded_correct_corner_first24h_count_model_mouse.tsv")
 
     reversal_pref = _load_result_table(output_root, "phase4_reversal_preference_index_awake_day_rate_mouse.tsv")
-    reversal_pref = reversal_pref.loc[reversal_pref["phase_day"].eq(3)].copy()
     reversal_pref_stats = _load_result_table(output_root, "phase4_reversal_preference_index_awake_day_rate_pairwise_stats.tsv")
     reversal_pref_omnibus = _load_result_table(output_root, "phase4_reversal_preference_index_awake_day_rate_omnibus_stats.tsv")
 
@@ -784,10 +783,46 @@ def render_target_group_summary_panels(
 
     _save_panel_figure(
         output_root,
+        f"{group_a}_vs_{group_b}_pr_day1_reversal_preference_index".replace(" ", "_"),
+        lambda ax: _draw_distribution_panel(
+            ax,
+            reversal_pref.loc[reversal_pref["phase_day"].eq(1)].copy(),
+            value_col="value",
+            group_order=comparison_reversal,
+            group_colors=group_colors,
+            title="PR day 1 awake\nReversal preference index",
+            ylabel="New / (new + previous)\n(higher = better)",
+            pairwise_stats=reversal_pref_stats,
+            pairwise_filter_column="phase_day",
+            pairwise_filter_value=1,
+            as_percent=False,
+            reference_line=0.5,
+        ),
+    )
+    _save_panel_figure(
+        output_root,
+        "all_groups_pr_day1_reversal_preference_index",
+        lambda ax: _draw_distribution_panel(
+            ax,
+            reversal_pref.loc[reversal_pref["phase_day"].eq(1)].copy(),
+            value_col="value",
+            group_order=all_reversal,
+            group_colors=group_colors,
+            title="PR day 1 awake\nReversal preference index",
+            ylabel="New / (new + previous)\n(higher = better)",
+            pairwise_stats=reversal_pref_stats,
+            pairwise_filter_column="phase_day",
+            pairwise_filter_value=1,
+            as_percent=False,
+            reference_line=0.5,
+        ),
+    )
+    _save_panel_figure(
+        output_root,
         f"{group_a}_vs_{group_b}_pr_day3_reversal_preference_index".replace(" ", "_"),
         lambda ax: _draw_distribution_panel(
             ax,
-            reversal_pref,
+            reversal_pref.loc[reversal_pref["phase_day"].eq(3)].copy(),
             value_col="value",
             group_order=comparison_reversal,
             group_colors=group_colors,
@@ -805,7 +840,7 @@ def render_target_group_summary_panels(
         "all_groups_pr_day3_reversal_preference_index",
         lambda ax: _draw_distribution_panel(
             ax,
-            reversal_pref,
+            reversal_pref.loc[reversal_pref["phase_day"].eq(3)].copy(),
             value_col="value",
             group_order=all_reversal,
             group_colors=group_colors,
