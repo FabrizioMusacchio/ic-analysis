@@ -151,6 +151,14 @@ def _group_color(group_name: str) -> str:
 
     return GROUP_COLORS.get(group_name, "#457b9d")
 
+def _ordered_group_names_from_series(series: pd.Series) -> list[str]:
+    """Return pathology groups in categorical order when available."""
+
+    categories = getattr(series.dtype, "categories", None)
+    if categories is not None:
+        return [str(category) for category in categories if str(category) != "nan"]
+    return [str(group) for group in series.dropna().astype(str).unique()]
+
 def _mouse_trace_colors(mouse_labels: list[str]) -> dict[str, tuple[float, float, float, float]]:
     """Return stable distinct colors for individual mouse traces within one panel."""
 
@@ -1473,9 +1481,12 @@ def plot_group_day_violin(
     metric_title: str,
     ylabel: str,
     pairwise_stats: pd.DataFrame,
-    chance_stats: pd.DataFrame,
+    chance_stats: pd.DataFrame | None,
     output_path: Path,
     outlier_col: str = "is_outlier",
+    reference_line: float | None = 25.0,
+    value_scale: float = 100.0,
+    format_as_percent: bool = True,
 ) -> None:
     """Plot one awake-only day-wise group violin panel with significance annotations."""
 
@@ -1491,14 +1502,14 @@ def plot_group_day_violin(
     panel_inliers = panel.loc[~panel["__is_outlier"]].copy()
 
     _prepare_output_path(output_path)
-    group_order = [str(group) for group in panel["Group"].dropna().unique()]
+    group_order = _ordered_group_names_from_series(panel["Group"])
     positions = np.arange(1, len(group_order) + 1)
     fig, ax = plt.subplots(figsize=_figsize_cm(*VIOLIN_FIGSIZE_CM))
 
     violin_data: list[np.ndarray] = []
     for group_name in group_order:
         violin_data.append(
-            panel_inliers.loc[panel_inliers["Group"].astype(str).eq(group_name), "value"].dropna().to_numpy(dtype=float) * 100.0
+            panel_inliers.loc[panel_inliers["Group"].astype(str).eq(group_name), "value"].dropna().to_numpy(dtype=float) * float(value_scale)
         )
     violins = ax.violinplot(violin_data, positions=positions, widths=0.8, showmeans=False, showmedians=True)
     for body, group_name in zip(violins["bodies"], group_order):
@@ -1533,7 +1544,7 @@ def plot_group_day_violin(
             ]
             .dropna()
             .to_numpy(dtype=float)
-            * 100.0
+            * float(value_scale)
         )
         if len(outlier_values) > 0:
             outlier_jitter = np.linspace(-0.08, 0.08, len(outlier_values)) if len(outlier_values) > 1 else np.array([0.0])
@@ -1550,9 +1561,15 @@ def plot_group_day_violin(
 
     ax.set_xticks(positions)
     ax.set_xticklabels(group_order, rotation=25, ha="right")
-    _format_rate_axis(ax, ylabel=ylabel)
+    if format_as_percent:
+        _format_rate_axis(ax, ylabel=ylabel)
+    else:
+        y_max = float(panel["value"].dropna().max() * float(value_scale)) if panel["value"].notna().any() else 1.0
+        ax.set_ylim(0, max(1.2, y_max * 1.20))
+        ax.set_ylabel(_wrap_axis_label(ylabel))
     ax.set_title(f"{_title_start(metric_title)}\n{phase_display_name} day {phase_day} awake")
-    ax.axhline(25.0, color="#4f4f4f", linestyle="--", linewidth=1.0, zorder=1)
+    if reference_line is not None:
+        ax.axhline(float(reference_line), color="#4f4f4f", linestyle="--", linewidth=1.0, zorder=1)
     ax.grid(False)
     ax.spines["left"].set_visible(False)
     ax.spines["bottom"].set_visible(False)
@@ -1560,10 +1577,11 @@ def plot_group_day_violin(
     significant_pairs = pairwise_stats.loc[
         pairwise_stats["phase_day"].eq(phase_day) & pairwise_stats["p_value"].lt(0.05)
     ].copy()
-    y_data_max = float(max(100.0, panel["value"].dropna().max() * 100.0 if panel["value"].notna().any() else 100.0))
-    y_base = max(104.0, y_data_max + 5.0)
-    y_step = 10.0
-    y_limit = 124.0
+    default_min = 100.0 if format_as_percent else 1.0
+    y_data_max = float(max(default_min, panel["value"].dropna().max() * float(value_scale) if panel["value"].notna().any() else default_min))
+    y_base = max((104.0 if format_as_percent else y_data_max * 1.05), y_data_max + (5.0 if format_as_percent else max(0.1, y_data_max * 0.08)))
+    y_step = 10.0 if format_as_percent else max(0.12, y_data_max * 0.10)
+    y_limit = 124.0 if format_as_percent else max(1.25, y_base + 0.4)
     for pair_index, (_, row) in enumerate(significant_pairs.iterrows()):
         left = group_order.index(str(row["group1"])) + 1
         right = group_order.index(str(row["group2"])) + 1
@@ -1572,7 +1590,7 @@ def plot_group_day_violin(
         ax.plot([left, left, right, right], [line_y - 1.1, line_y, line_y, line_y - 1.1], color="#444444", linewidth=1.0)
         ax.text(
             (left + right) / 2.0,
-            line_y + 1.8,
+            line_y + (1.8 if format_as_percent else max(0.04, y_step * 0.18)),
             f"p={float(row['p_value']):.3g}",
             ha="center",
             va="bottom",
@@ -1580,15 +1598,16 @@ def plot_group_day_violin(
             color="#444444",
         )
 
-    chance_star_y = max(116.0, y_base + len(significant_pairs) * y_step + 3.5)
-    for position, group_name in zip(positions, group_order):
-        chance_row = chance_stats.loc[
-            chance_stats["phase_day"].eq(phase_day) & chance_stats["Group"].astype(str).eq(group_name)
-        ]
-        if not chance_row.empty and float(chance_row["p_value"].iloc[0]) < 0.05:
-            ax.text(position, chance_star_y, "*", ha="center", va="center", fontsize=_font_size(6.0), color="#222222")
+    chance_star_y = max((116.0 if format_as_percent else y_base + len(significant_pairs) * y_step + max(0.08, y_step * 0.3)), y_base + len(significant_pairs) * y_step + (3.5 if format_as_percent else max(0.08, y_step * 0.3)))
+    if chance_stats is not None and not chance_stats.empty:
+        for position, group_name in zip(positions, group_order):
+            chance_row = chance_stats.loc[
+                chance_stats["phase_day"].eq(phase_day) & chance_stats["Group"].astype(str).eq(group_name)
+            ]
+            if not chance_row.empty and float(chance_row["p_value"].iloc[0]) < 0.05:
+                ax.text(position, chance_star_y, "*", ha="center", va="center", fontsize=_font_size(6.0), color="#222222")
 
-    ax.set_ylim(0, max(y_limit, chance_star_y + 6.0))
+    ax.set_ylim(0, max(y_limit, chance_star_y + (6.0 if format_as_percent else max(0.12, y_step * 0.45))))
     _save_figure(fig, output_path)
 
 def plot_cumulative_role_curves(
@@ -1753,7 +1772,7 @@ def plot_onset_violin(
     else:
         plot_data["__is_outlier"] = False
     plot_inliers = plot_data.loc[~plot_data["__is_outlier"]].copy()
-    group_order = [str(group) for group in plot_data["Group"].dropna().unique()]
+    group_order = _ordered_group_names_from_series(plot_data["Group"])
     positions = np.arange(1, len(group_order) + 1)
     fig, ax = plt.subplots(figsize=_figsize_cm(*ONSET_FIGSIZE_CM))
 
@@ -1853,7 +1872,7 @@ def plot_phase_activity_boxplot(
 
     _prepare_output_path(output_path)
     phase_numbers = sorted(mouse_phase_activity["PhaseNumber"].unique())
-    group_order = [str(group) for group in mouse_phase_activity["Group"].dropna().unique()]
+    group_order = _ordered_group_names_from_series(mouse_phase_activity["Group"])
     fig, ax = plt.subplots(figsize=_figsize_cm(*ACTIVITY_FIGSIZE_CM))
 
     positions: dict[tuple[str, int], float] = {}

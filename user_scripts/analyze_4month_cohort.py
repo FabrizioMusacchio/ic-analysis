@@ -12,6 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 
+import numpy as np
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -24,10 +25,13 @@ from intellicage_place_learning.metrics import (
     build_phase_time_limit_table,
     build_analysis_phase_window_table,
     compute_awake_day_rate_tables,
+    compute_awake_day_ratio_tables,
+    compute_binomial_glm_group_statistics,
     compute_experiment_drinking_visit_bins,
     compute_experiment_lick_count_bins,
     compute_experiment_nosepoke_count_bins,
     compute_experiment_visit_bins,
+    compute_first_hours_rate_table,
     compute_group_day_violin_statistics,
     compute_onset_group_statistics,
     compute_phase4_reversal_rate_bins,
@@ -39,7 +43,9 @@ from intellicage_place_learning.metrics import (
     compute_phase_visit_count_bins,
     compute_place_learning_count_bins,
     compute_place_learning_rate_bins,
+    compute_responder_group_statistics,
     compute_role_cumulative_curves,
+    compute_threshold_responder_table,
     compute_time_window_learning_curves,
     compute_visit_window_learning_curves,
     filter_visits_by_phase_limits,
@@ -83,9 +89,9 @@ DEFAULT_EXCLUDED_GROUPS = ["WT"]
 DEFAULT_GROUP_RENAMES = {
     "WT": "WT",
     "tdTomato": "tdTomato",
-    "Tau 66-421": "Tau 66-421",
-    "Tau 1-421": "Tau 1-421",
     "Tau 1-441": "Tau 1-441",
+    "Tau 1-421": "Tau 1-421",
+    "Tau 66-421": "Tau 66-421",
 }
 DEFAULT_GROUP_COLORS = {
     "WT": "#264653",
@@ -133,6 +139,10 @@ USER_AWAKE_DURATION_HOURS = DEFAULT_AWAKE_DURATION_HOURS
 USER_SCHEDULED_PHASE_START_HOURS = DEFAULT_SCHEDULED_PHASE_START_HOURS.copy()
 USER_BASE_FONT_SIZE = 10.0
 USER_EXCLUDE_VIOLIN_OUTLIERS = True
+USER_RATE_THRESHOLD_PCTS = [50.0, 60.0, 70.0, 80.0]
+USER_THRESHOLD_ONSET_BIN_HOURS = 1
+USER_RESPONDER_HORIZONS_HOURS = [24.0, 48.0, 72.0]
+USER_BINOMIAL_MODEL_FIRST_HOURS = 24.0
 # %% FUNCTIONS
 def parse_numeric_mapping(raw_items: list[str]) -> dict[int, float]:
     """Parse `key=value` CLI strings into a numeric dictionary."""
@@ -1278,6 +1288,458 @@ def render_experience_learning_plots(
                 outlier_col="is_outlier",
             )
 
+def compute_rate_threshold_onset_table(
+    visits: pd.DataFrame,
+    *,
+    phase_number: int,
+    success_col: str,
+    bin_hours: int,
+    threshold_pct: float,
+) -> pd.DataFrame:
+    """Return the first binned hour at which each mouse exceeds a rate threshold."""
+
+    mouse_bins, _ = compute_place_learning_rate_bins(
+        visits,
+        phase_number=phase_number,
+        bin_hours=bin_hours,
+        success_col=success_col,
+    )
+    if mouse_bins.empty:
+        return pd.DataFrame()
+
+    threshold = float(threshold_pct) / 100.0
+    onset_rows: list[dict[str, object]] = []
+    for (group_name, et, et_label, sex), mouse_data in mouse_bins.groupby(
+        ["Group", "ET", "ETLabel", "SEX"], observed=True
+    ):
+        valid = mouse_data.loc[mouse_data["all_visits"].gt(0) & mouse_data["value"].gt(threshold)].copy()
+        onset_hour = float(valid["bin_start_hours"].min()) if not valid.empty else pd.NA
+        onset_rows.append(
+            {
+                "Group": str(group_name),
+                "ET": et,
+                "ETLabel": str(et_label),
+                "SEX": sex,
+                "onset_hours": onset_hour,
+            }
+        )
+    return pd.DataFrame(onset_rows)
+
+def render_rate_threshold_onset_plots(
+    visits: pd.DataFrame,
+    output_dir: Path,
+    *,
+    phase_display_names: dict[int, str],
+    threshold_pcts: list[float] | tuple[float, ...],
+    bin_hours: int,
+    exclude_outliers: bool,
+) -> None:
+    """Render violin plots for first threshold crossing of binned learning rates."""
+
+    metric_specs = [
+        ("correct_corner_visit", "correct_corner", "correct-corner visit rate"),
+        ("correct_np_visit", "correct_np", "correct NP visit rate"),
+        ("rewarded_correct_corner_visit", "rewarded_correct_corner", "rewarded correct-corner visit rate"),
+    ]
+    for phase_number in (3, 4):
+        for success_col, metric_stub, title_label in metric_specs:
+            for threshold_pct in threshold_pcts:
+                threshold_tag = f"{int(threshold_pct)}pct"
+                onset_table = compute_rate_threshold_onset_table(
+                    visits,
+                    phase_number=phase_number,
+                    success_col=success_col,
+                    bin_hours=bin_hours,
+                    threshold_pct=threshold_pct,
+                )
+                if onset_table.empty:
+                    continue
+                save_table(
+                    onset_table,
+                    output_dir / f"phase{phase_number}_{metric_stub}_{bin_hours}h_threshold_onset_{threshold_tag}_mouse.tsv",
+                )
+                flagged = flag_iqr_outliers(
+                    onset_table,
+                    value_col="onset_hours",
+                    group_cols=["Group"],
+                )
+                save_table(
+                    flagged,
+                    output_dir / f"phase{phase_number}_{metric_stub}_{bin_hours}h_threshold_onset_{threshold_tag}_mouse_with_outliers.tsv",
+                )
+                omnibus, pairwise = compute_onset_group_statistics(
+                    flagged,
+                    onset_col="onset_hours",
+                    phase_number=phase_number,
+                    metric_name=f"{metric_stub}_{bin_hours}h_threshold_onset_gt_{threshold_tag}",
+                    exclude_outliers=exclude_outliers,
+                )
+                save_table(
+                    omnibus,
+                    output_dir / f"phase{phase_number}_{metric_stub}_{bin_hours}h_threshold_onset_{threshold_tag}_omnibus_stats.tsv",
+                )
+                save_table(
+                    pairwise,
+                    output_dir / f"phase{phase_number}_{metric_stub}_{bin_hours}h_threshold_onset_{threshold_tag}_pairwise_stats.tsv",
+                )
+                plot_onset_violin(
+                    flagged,
+                    onset_col="onset_hours",
+                    phase_display_name=phase_display_names[phase_number],
+                    title_label=f"{title_label} first exceeds {int(threshold_pct)}%",
+                    ylabel="Threshold onset [hours]",
+                    output_path=output_dir / f"phase{phase_number}_{metric_stub}_{bin_hours}h_threshold_onset_{threshold_tag}_violin.png",
+                    pairwise_stats=pairwise,
+                    outlier_col="is_outlier",
+                )
+
+def render_count_model_and_responder_analyses(
+    visits: pd.DataFrame,
+    output_dir: Path,
+    *,
+    phase_display_names: dict[int, str],
+    scheduled_phase_start_hours: dict[int, float],
+    mouse_day_start_hour: float,
+    awake_end_clock_hour: float,
+    threshold_pcts: list[float] | tuple[float, ...],
+    threshold_bin_hours: int,
+    responder_horizons_hours: list[float] | tuple[float, ...],
+    glm_first_hours: float,
+) -> None:
+    """Render count-based model summaries and criterion-reached responder tables.
+
+    These analyses complement the existing percent-based plots with models that
+    operate directly on success/failure counts and with mouse-level responder
+    labels derived from threshold-onset times.
+    """
+
+    metric_specs = [
+        ("correct_corner_visit", "correct_corner", "correct-corner visit rate"),
+        ("correct_np_visit", "correct_np", "correct NP visit rate"),
+        ("rewarded_correct_corner_visit", "rewarded_correct_corner", "rewarded correct-corner visit rate"),
+    ]
+
+    for phase_number in (3, 4):
+        phase_origin_hour = phase_origin_clock_hour(mouse_day_start_hour, scheduled_phase_start_hours[phase_number])
+        for success_col, metric_stub, title_label in metric_specs:
+            awake_mouse, _ = compute_awake_day_rate_tables(
+                visits,
+                phase_number=phase_number,
+                success_col=success_col,
+                origin_clock_hour=phase_origin_hour,
+                awake_start_clock_hour=mouse_day_start_hour,
+                awake_end_clock_hour=awake_end_clock_hour,
+                max_days=3,
+            )
+            if not awake_mouse.empty:
+                awake_mouse["PhaseNumber"] = phase_number
+                save_table(
+                    awake_mouse,
+                    output_dir / f"phase{phase_number}_{metric_stub}_awake_day_count_model_mouse.tsv",
+                )
+                omnibus, pairwise = compute_binomial_glm_group_statistics(
+                    awake_mouse,
+                    phase_number=phase_number,
+                    metric_name=f"{metric_stub}_awake_day_count_model",
+                    success_col="correct_visits",
+                    total_col="all_visits",
+                    subset_col="phase_day",
+                    subset_label="phase_day",
+                )
+                save_table(
+                    omnibus,
+                    output_dir / f"phase{phase_number}_{metric_stub}_awake_day_count_model_omnibus_stats.tsv",
+                )
+                save_table(
+                    pairwise,
+                    output_dir / f"phase{phase_number}_{metric_stub}_awake_day_count_model_pairwise_stats.tsv",
+                )
+
+            first_hours_table = compute_first_hours_rate_table(
+                visits,
+                phase_number=phase_number,
+                success_col=success_col,
+                first_hours=glm_first_hours,
+            )
+            if not first_hours_table.empty:
+                save_table(
+                    first_hours_table,
+                    output_dir / f"phase{phase_number}_{metric_stub}_first{int(glm_first_hours)}h_count_model_mouse.tsv",
+                )
+                first_omnibus, first_pairwise = compute_binomial_glm_group_statistics(
+                    first_hours_table,
+                    phase_number=phase_number,
+                    metric_name=f"{metric_stub}_first{int(glm_first_hours)}h_count_model",
+                    success_col="correct_visits",
+                    total_col="all_visits",
+                )
+                save_table(
+                    first_omnibus,
+                    output_dir / f"phase{phase_number}_{metric_stub}_first{int(glm_first_hours)}h_count_model_omnibus_stats.tsv",
+                )
+                save_table(
+                    first_pairwise,
+                    output_dir / f"phase{phase_number}_{metric_stub}_first{int(glm_first_hours)}h_count_model_pairwise_stats.tsv",
+                )
+
+            for threshold_pct in threshold_pcts:
+                threshold_tag = f"{int(threshold_pct)}pct"
+                onset_table = compute_rate_threshold_onset_table(
+                    visits,
+                    phase_number=phase_number,
+                    success_col=success_col,
+                    bin_hours=threshold_bin_hours,
+                    threshold_pct=threshold_pct,
+                )
+                if onset_table.empty:
+                    continue
+                responder_table = compute_threshold_responder_table(
+                    onset_table,
+                    phase_number=phase_number,
+                    threshold_pct=threshold_pct,
+                    horizons_hours=tuple(float(value) for value in responder_horizons_hours),
+                )
+                if responder_table.empty:
+                    continue
+                save_table(
+                    responder_table,
+                    output_dir / f"phase{phase_number}_{metric_stub}_{threshold_bin_hours}h_threshold_responder_{threshold_tag}_mouse.tsv",
+                )
+                responder_summary, responder_omnibus, responder_pairwise = compute_responder_group_statistics(
+                    responder_table,
+                    phase_number=phase_number,
+                    metric_name=f"{metric_stub}_{threshold_bin_hours}h_threshold_responder_{threshold_tag}",
+                )
+                save_table(
+                    responder_summary,
+                    output_dir / f"phase{phase_number}_{metric_stub}_{threshold_bin_hours}h_threshold_responder_{threshold_tag}_summary.tsv",
+                )
+                save_table(
+                    responder_omnibus,
+                    output_dir / f"phase{phase_number}_{metric_stub}_{threshold_bin_hours}h_threshold_responder_{threshold_tag}_omnibus_stats.tsv",
+                )
+                save_table(
+                    responder_pairwise,
+                    output_dir / f"phase{phase_number}_{metric_stub}_{threshold_bin_hours}h_threshold_responder_{threshold_tag}_pairwise_stats.tsv",
+                )
+
+def compute_auc_above_chance_table(
+    visits: pd.DataFrame,
+    *,
+    phase_number: int,
+    success_col: str,
+    bin_hours: int,
+    chance_level_pct: float = 25.0,
+    first_hours: float = 24.0,
+) -> pd.DataFrame:
+    """Compute per-mouse AUC above chance from binned phase rates in the early phase."""
+
+    mouse_bins, _ = compute_place_learning_rate_bins(
+        visits,
+        phase_number=phase_number,
+        bin_hours=bin_hours,
+        success_col=success_col,
+    )
+    if mouse_bins.empty:
+        return pd.DataFrame()
+
+    early = mouse_bins.loc[mouse_bins["bin_start_hours"].lt(float(first_hours))].copy()
+    if early.empty:
+        return pd.DataFrame()
+    chance = float(chance_level_pct) / 100.0
+    early["auc_component"] = np.clip(early["value"].fillna(0.0) - chance, a_min=0.0, a_max=None) * float(bin_hours)
+    summary = (
+        early.groupby(["Group", "ET", "ETLabel", "SEX"], observed=True)
+        .agg(
+            auc_above_chance=("auc_component", "sum"),
+            contributing_bins=("all_visits", lambda values: int(np.sum(pd.Series(values).gt(0)))),
+        )
+        .reset_index()
+    )
+    return summary
+
+def render_derived_metric_plots(
+    visits: pd.DataFrame,
+    output_dir: Path,
+    *,
+    phase_display_names: dict[int, str],
+    scheduled_phase_start_hours: dict[int, float],
+    mouse_day_start_hour: float,
+    awake_end_clock_hour: float,
+    exclude_outliers: bool,
+) -> None:
+    """Render completion-efficiency, perseveration-index, and early-AUC summary plots."""
+
+    ratio_visits = visits.copy()
+    ratio_visits["new_or_previous_correct_corner_visit"] = (
+        ratio_visits["correct_corner_visit"].fillna(False).astype(bool)
+        | ratio_visits["previous_correct_corner_visit"].fillna(False).astype(bool)
+    )
+
+    derived_specs = [
+        {
+            "phase_number": 3,
+            "metric_stub": "completion_efficiency",
+            "title_label": "completion efficiency",
+            "ylabel": "Rewarded correct / correct NP [%]",
+            "numerator_col": "rewarded_correct_corner_visit",
+            "denominator_col": "correct_np_visit",
+            "reference_line": None,
+            "pseudocount": 0.0,
+        },
+        {
+            "phase_number": 4,
+            "metric_stub": "completion_efficiency",
+            "title_label": "completion efficiency",
+            "ylabel": "Rewarded correct / correct NP [%]",
+            "numerator_col": "rewarded_correct_corner_visit",
+            "denominator_col": "correct_np_visit",
+            "reference_line": None,
+            "pseudocount": 0.0,
+        },
+        {
+            "phase_number": 4,
+            "metric_stub": "perseveration_index",
+            "title_label": "perseveration index (new / previous; higher = better)",
+            "ylabel": "Perseveration index\n(new / previous; higher = better)",
+            "numerator_col": "correct_corner_visit",
+            "denominator_col": "previous_correct_corner_visit",
+            "reference_line": 1.0,
+            "pseudocount": 0.5,
+            "value_scale": 1.0,
+            "format_as_percent": False,
+        },
+        {
+            "phase_number": 4,
+            "metric_stub": "reversal_preference_index",
+            "title_label": "reversal preference index (new / (new + previous); higher = better)",
+            "ylabel": "Reversal preference index\n(new / (new + previous); higher = better)",
+            "numerator_col": "correct_corner_visit",
+            "denominator_col": "new_or_previous_correct_corner_visit",
+            "reference_line": 0.5,
+            "pseudocount": 0.0,
+            "value_scale": 1.0,
+            "format_as_percent": False,
+        },
+    ]
+    for spec in derived_specs:
+        phase_number = int(spec["phase_number"])
+        phase_origin_hour = phase_origin_clock_hour(mouse_day_start_hour, scheduled_phase_start_hours[phase_number])
+        mouse_table, summary = compute_awake_day_ratio_tables(
+            ratio_visits,
+            phase_number=phase_number,
+            numerator_col=str(spec["numerator_col"]),
+            denominator_col=str(spec["denominator_col"]),
+            origin_clock_hour=phase_origin_hour,
+            awake_start_clock_hour=mouse_day_start_hour,
+            awake_end_clock_hour=awake_end_clock_hour,
+            max_days=3,
+            pseudocount=float(spec["pseudocount"]),
+        )
+        if mouse_table.empty:
+            continue
+        mouse_table["PhaseNumber"] = phase_number
+        save_table(
+            mouse_table,
+            output_dir / f"phase{phase_number}_{spec['metric_stub']}_awake_day_rate_mouse.tsv",
+        )
+        flagged = flag_iqr_outliers(
+            mouse_table,
+            value_col="value",
+            group_cols=["Group", "phase_day"],
+        )
+        save_table(
+            flagged,
+            output_dir / f"phase{phase_number}_{spec['metric_stub']}_awake_day_rate_mouse_with_outliers.tsv",
+        )
+        omnibus, pairwise, _ = compute_group_day_violin_statistics(
+            flagged,
+            phase_number=phase_number,
+            metric_name=str(spec["metric_stub"]),
+            chance_level=0.25,
+            exclude_outliers=exclude_outliers,
+        )
+        save_table(
+            omnibus,
+            output_dir / f"phase{phase_number}_{spec['metric_stub']}_awake_day_rate_omnibus_stats.tsv",
+        )
+        save_table(
+            pairwise,
+            output_dir / f"phase{phase_number}_{spec['metric_stub']}_awake_day_rate_pairwise_stats.tsv",
+        )
+        for phase_day in (1, 2, 3):
+            plot_group_day_violin(
+                flagged,
+                phase_number=phase_number,
+                phase_display_name=phase_display_names[phase_number],
+                phase_day=phase_day,
+                metric_title=str(spec["title_label"]),
+                ylabel=str(spec["ylabel"]),
+                pairwise_stats=pairwise,
+                chance_stats=None,
+                output_path=output_dir / f"phase{phase_number}_{spec['metric_stub']}_awake_day{phase_day}_violin.png",
+                reference_line=spec["reference_line"],
+                value_scale=float(spec.get("value_scale", 100.0)),
+                format_as_percent=bool(spec.get("format_as_percent", True)),
+            )
+
+    auc_specs = [
+        ("correct_corner_visit", "correct_corner", "correct-corner"),
+        ("correct_np_visit", "correct_np", "correct NP"),
+        ("rewarded_correct_corner_visit", "rewarded_correct_corner", "rewarded correct-corner"),
+    ]
+    for phase_number in (3, 4):
+        for success_col, metric_stub, title_label in auc_specs:
+            auc_table = compute_auc_above_chance_table(
+                visits,
+                phase_number=phase_number,
+                success_col=success_col,
+                bin_hours=1,
+                chance_level_pct=25.0,
+                first_hours=24.0,
+            )
+            if auc_table.empty:
+                continue
+            save_table(
+                auc_table,
+                output_dir / f"phase{phase_number}_{metric_stub}_auc_above_chance_first24h_mouse.tsv",
+            )
+            flagged = flag_iqr_outliers(
+                auc_table,
+                value_col="auc_above_chance",
+                group_cols=["Group"],
+            )
+            save_table(
+                flagged,
+                output_dir / f"phase{phase_number}_{metric_stub}_auc_above_chance_first24h_mouse_with_outliers.tsv",
+            )
+            omnibus, pairwise = compute_onset_group_statistics(
+                flagged.rename(columns={"auc_above_chance": "onset_hours"}),
+                onset_col="onset_hours",
+                phase_number=phase_number,
+                metric_name=f"{metric_stub}_auc_above_chance_first24h",
+                exclude_outliers=exclude_outliers,
+            )
+            save_table(
+                omnibus,
+                output_dir / f"phase{phase_number}_{metric_stub}_auc_above_chance_first24h_omnibus_stats.tsv",
+            )
+            save_table(
+                pairwise,
+                output_dir / f"phase{phase_number}_{metric_stub}_auc_above_chance_first24h_pairwise_stats.tsv",
+            )
+            plot_onset_violin(
+                flagged.rename(columns={"auc_above_chance": "onset_hours"}),
+                onset_col="onset_hours",
+                phase_display_name=phase_display_names[phase_number],
+                title_label=f"{title_label} AUC above chance in first 24 h",
+                ylabel="AUC above chance [%*h]",
+                output_path=output_dir / f"phase{phase_number}_{metric_stub}_auc_above_chance_first24h_violin.png",
+                pairwise_stats=pairwise,
+                outlier_col="is_outlier",
+                reference_line=0.0,
+            )
+
 def run_analysis(
     *,
     dataset_root: Path = DEFAULT_DATASET_ROOT,
@@ -1302,6 +1764,10 @@ def run_analysis(
     scheduled_phase_start_hours: dict[int, float] | None = None,
     base_font_size: float = 10.0,
     exclude_violin_outliers: bool = True,
+    rate_threshold_pcts: list[float] | tuple[float, ...] = (50.0, 60.0, 70.0, 80.0),
+    threshold_onset_bin_hours: int = 1,
+    responder_horizons_hours: list[float] | tuple[float, ...] = (24.0, 48.0, 72.0),
+    binomial_model_first_hours: float = 24.0,
 ) -> Path:
     """Run the 4-month cohort pipeline from a normal Python function call.
 
@@ -1377,6 +1843,10 @@ def run_analysis(
                     "figure_size_cm",
                     "base_font_size",
                     "exclude_violin_outliers",
+                    "rate_threshold_pcts",
+                    "threshold_onset_bin_hours",
+                    "responder_horizons_hours",
+                    "binomial_model_first_hours",
                 ],
                 "Value": [
                     mouse_day_start_hour,
@@ -1393,6 +1863,10 @@ def run_analysis(
                         ";".join(f"{key}={value}" for key, value in (figure_size_cm or {}).items()),
                         base_font_size,
                         exclude_violin_outliers,
+                        ",".join(str(value) for value in rate_threshold_pcts),
+                        threshold_onset_bin_hours,
+                        ",".join(str(value) for value in responder_horizons_hours),
+                        binomial_model_first_hours,
                     ],
             }
         ),
@@ -1523,6 +1997,38 @@ def run_analysis(
         spread_metric=spread_metric,
         exclude_outliers=exclude_violin_outliers,
     )
+    print("done. Rendering threshold-onset violin plots...")
+    render_rate_threshold_onset_plots(
+        filtered_visits,
+        output_root,
+        phase_display_names=DEFAULT_PHASE_DISPLAY_NAMES,
+        threshold_pcts=rate_threshold_pcts,
+        bin_hours=threshold_onset_bin_hours,
+        exclude_outliers=exclude_violin_outliers,
+    )
+    print("done. Rendering derived ratio and AUC plots...")
+    render_derived_metric_plots(
+        filtered_visits,
+        output_root,
+        phase_display_names=DEFAULT_PHASE_DISPLAY_NAMES,
+        scheduled_phase_start_hours=merged_scheduled_phase_starts,
+        mouse_day_start_hour=mouse_day_start_hour,
+        awake_end_clock_hour=awake_end_clock_hour,
+        exclude_outliers=exclude_violin_outliers,
+    )
+    print("done. Rendering responder and count-model analyses...")
+    render_count_model_and_responder_analyses(
+        filtered_visits,
+        output_root,
+        phase_display_names=DEFAULT_PHASE_DISPLAY_NAMES,
+        scheduled_phase_start_hours=merged_scheduled_phase_starts,
+        mouse_day_start_hour=mouse_day_start_hour,
+        awake_end_clock_hour=awake_end_clock_hour,
+        threshold_pcts=rate_threshold_pcts,
+        threshold_bin_hours=threshold_onset_bin_hours,
+        responder_horizons_hours=responder_horizons_hours,
+        glm_first_hours=binomial_model_first_hours,
+    )
     print("done. Rendering cumulative role plots...")
     render_cumulative_role_plots(
         filtered_visits,
@@ -1559,6 +2065,10 @@ def main() -> None:
         scheduled_phase_start_hours=USER_SCHEDULED_PHASE_START_HOURS,
         base_font_size=USER_BASE_FONT_SIZE,
         exclude_violin_outliers=USER_EXCLUDE_VIOLIN_OUTLIERS,
+        rate_threshold_pcts=USER_RATE_THRESHOLD_PCTS,
+        threshold_onset_bin_hours=USER_THRESHOLD_ONSET_BIN_HOURS,
+        responder_horizons_hours=USER_RESPONDER_HORIZONS_HOURS,
+        binomial_model_first_hours=USER_BINOMIAL_MODEL_FIRST_HOURS,
     )
 
 # %% ENTRY POINT

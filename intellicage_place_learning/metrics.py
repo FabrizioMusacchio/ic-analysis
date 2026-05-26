@@ -13,6 +13,8 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 from scipy.stats import binomtest
+import statsmodels.api as sm
+import statsmodels.formula.api as smf
 from statsmodels.stats.multicomp import pairwise_tukeyhsd
 from statsmodels.stats.multitest import multipletests
 
@@ -726,6 +728,542 @@ def compute_awake_day_rate_tables(
     )
     return mouse_table, summary
 
+def compute_awake_day_ratio_tables(
+    visits: pd.DataFrame,
+    *,
+    phase_number: int,
+    numerator_col: str,
+    denominator_col: str,
+    origin_clock_hour: float,
+    awake_start_clock_hour: float,
+    awake_end_clock_hour: float,
+    max_days: int = 3,
+    pseudocount: float = 0.0,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Compute awake-only daily ratios from two visit-level indicator columns."""
+
+    phase_visits = _phase_segment_table(
+        visits,
+        phase_number=phase_number,
+        origin_clock_hour=origin_clock_hour,
+        awake_start_clock_hour=awake_start_clock_hour,
+        awake_end_clock_hour=awake_end_clock_hour,
+    )
+    phase_visits = phase_visits.loc[
+        phase_visits["segment_day"].between(1, max_days) & phase_visits["segment_name"].eq("awake")
+    ].copy()
+    if phase_visits.empty:
+        return _empty_count_tables()
+
+    grouped = (
+        phase_visits.groupby(
+            ["Group", "ET", "ETLabel", "SEX", "segment_day", "segment_name", "segment_order", "segment_label"],
+            observed=True,
+        )
+        .agg(
+            numerator_count=(numerator_col, "sum"),
+            denominator_count=(denominator_col, "sum"),
+        )
+        .reset_index()
+    )
+    grouped["value"] = (grouped["numerator_count"] + float(pseudocount)) / (
+        grouped["denominator_count"] + float(pseudocount)
+    )
+    if pseudocount == 0.0:
+        grouped["value"] = grouped["value"].where(grouped["denominator_count"].gt(0), np.nan)
+
+    mice = phase_visits.loc[:, ["Group", "ET", "ETLabel", "SEX"]].drop_duplicates().reset_index(drop=True)
+    day_frame = pd.DataFrame(
+        [
+            {
+                "segment_day": day,
+                "segment_name": "awake",
+                "segment_order": (day - 1) * 2 + 1,
+                "segment_label": f"Day {day} awake",
+            }
+            for day in range(1, max_days + 1)
+        ]
+    )
+    mice["__key"] = 1
+    day_frame["__key"] = 1
+    full_index = mice.merge(day_frame, on="__key", how="outer").drop(columns="__key")
+    mouse_table = full_index.merge(
+        grouped,
+        on=["Group", "ET", "ETLabel", "SEX", "segment_day", "segment_name", "segment_order", "segment_label"],
+        how="left",
+        validate="one_to_one",
+    )
+    mouse_table["numerator_count"] = mouse_table["numerator_count"].fillna(0.0)
+    mouse_table["denominator_count"] = mouse_table["denominator_count"].fillna(0.0)
+    if pseudocount == 0.0:
+        mouse_table["value"] = mouse_table["value"].where(mouse_table["denominator_count"].gt(0), np.nan)
+    else:
+        mouse_table["value"] = (
+            mouse_table["numerator_count"] + float(pseudocount)
+        ) / (mouse_table["denominator_count"] + float(pseudocount))
+    mouse_table = mouse_table.rename(
+        columns={
+            "segment_day": "phase_day",
+            "segment_name": "segment",
+        }
+    )
+
+    summary = (
+        mouse_table.groupby(["Group", "phase_day", "segment", "segment_order", "segment_label"], observed=True)
+        .agg(
+            mean_value=("value", "mean"),
+            median_value=("value", "median"),
+            std_value=("value", "std"),
+            mouse_n=("ET", "nunique"),
+            contributing_mouse_n=("value", lambda values: int(values.notna().sum())),
+            mean_numerator_count=("numerator_count", "mean"),
+            mean_denominator_count=("denominator_count", "mean"),
+        )
+        .reset_index()
+    )
+    summary["std_value"] = summary["std_value"].fillna(0.0)
+    summary["sem_value"] = summary["std_value"] / np.sqrt(summary["mouse_n"].clip(lower=1))
+    return mouse_table, summary
+
+def compute_first_hours_rate_table(
+    visits: pd.DataFrame,
+    *,
+    phase_number: int,
+    success_col: str,
+    first_hours: float = 24.0,
+) -> pd.DataFrame:
+    """Aggregate per-mouse success counts and rates within the first phase hours.
+
+    The resulting table is intended for early-learning analyses that use the
+    natural binomial structure of the IntelliCage data instead of only the
+    derived percentage values.
+    """
+
+    phase_visits = visits.loc[
+        visits["AnalysisPhaseNumber"].eq(phase_number)
+        & visits["analysis_phase_elapsed_hours"].ge(0.0)
+        & visits["analysis_phase_elapsed_hours"].lt(float(first_hours))
+    ].copy()
+    if phase_visits.empty:
+        return pd.DataFrame()
+
+    grouped = (
+        phase_visits.groupby(["Group", "ET", "ETLabel", "SEX"], observed=True)
+        .agg(
+            correct_visits=(success_col, "sum"),
+            all_visits=("VisitID", "size"),
+        )
+        .reset_index()
+    )
+    grouped["value"] = np.where(
+        grouped["all_visits"].gt(0),
+        grouped["correct_visits"] / grouped["all_visits"],
+        np.nan,
+    )
+    grouped["PhaseNumber"] = int(phase_number)
+    grouped["first_hours"] = float(first_hours)
+    return grouped
+
+def compute_threshold_responder_table(
+    onset_table: pd.DataFrame,
+    *,
+    phase_number: int,
+    threshold_pct: float,
+    horizons_hours: tuple[float, ...] = (24.0, 48.0, 72.0),
+) -> pd.DataFrame:
+    """Convert threshold-onset times into responder yes/no labels by horizon."""
+
+    if onset_table.empty:
+        return pd.DataFrame()
+
+    rows: list[dict[str, object]] = []
+    for _, row in onset_table.iterrows():
+        onset = row.get("onset_hours", np.nan)
+        for horizon_hours in horizons_hours:
+            reached = bool(pd.notna(onset) and float(onset) <= float(horizon_hours))
+            rows.append(
+                {
+                    "PhaseNumber": int(phase_number),
+                    "threshold_pct": float(threshold_pct),
+                    "horizon_hours": float(horizon_hours),
+                    "Group": row["Group"],
+                    "ET": row["ET"],
+                    "ETLabel": row["ETLabel"],
+                    "SEX": row["SEX"],
+                    "onset_hours": onset,
+                    "reached_criterion": reached,
+                }
+            )
+    return pd.DataFrame(rows)
+
+def compute_responder_group_statistics(
+    responder_table: pd.DataFrame,
+    *,
+    phase_number: int,
+    metric_name: str,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Compute responder summaries and group-comparison statistics.
+
+    Omnibus testing uses Fisher's exact test for two groups and chi-square for
+    more than two groups. Pairwise comparisons use Fisher's exact test with
+    FDR-BH correction.
+    """
+
+    if responder_table.empty:
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+
+    summary = (
+        responder_table.groupby(["PhaseNumber", "threshold_pct", "horizon_hours", "Group"], observed=True)
+        .agg(
+            responder_n=("reached_criterion", lambda values: int(pd.Series(values).fillna(False).astype(bool).sum())),
+            mouse_n=("ET", "nunique"),
+        )
+        .reset_index()
+    )
+    summary["non_responder_n"] = summary["mouse_n"] - summary["responder_n"]
+    summary["responder_rate"] = np.where(
+        summary["mouse_n"].gt(0),
+        summary["responder_n"] / summary["mouse_n"],
+        np.nan,
+    )
+
+    omnibus_rows: list[dict[str, object]] = []
+    pairwise_rows: list[dict[str, object]] = []
+    for (threshold_pct, horizon_hours), subset in summary.groupby(["threshold_pct", "horizon_hours"], observed=True):
+        groups = [str(group_name) for group_name in subset["Group"].astype(str)]
+        if len(groups) < 2:
+            continue
+        contingency = subset.loc[:, ["responder_n", "non_responder_n"]].to_numpy(dtype=int)
+        if len(groups) == 2:
+            _, omnibus_p = stats.fisher_exact(contingency)
+            omnibus_test = "fisher_exact"
+        else:
+            try:
+                _, omnibus_p, _, _ = stats.chi2_contingency(contingency)
+                omnibus_test = "chi2"
+            except ValueError:
+                # Sparse responder tables can contain structural zeros. In that
+                # case we apply a small Haldane-Anscombe continuity correction
+                # so the omnibus comparison remains computable.
+                _, omnibus_p, _, _ = stats.chi2_contingency(contingency + 0.5)
+                omnibus_test = "chi2_haldane"
+        omnibus_rows.append(
+            {
+                "PhaseNumber": int(phase_number),
+                "Metric": metric_name,
+                "threshold_pct": float(threshold_pct),
+                "horizon_hours": float(horizon_hours),
+                "test": omnibus_test,
+                "p_value": float(omnibus_p),
+                "group_n": len(groups),
+            }
+        )
+
+        raw_ps: list[float] = []
+        pair_rows: list[tuple[str, str]] = []
+        for left_index, left_group in enumerate(groups):
+            left_row = subset.loc[subset["Group"].astype(str).eq(left_group)].iloc[0]
+            for right_group in groups[left_index + 1 :]:
+                right_row = subset.loc[subset["Group"].astype(str).eq(right_group)].iloc[0]
+                table = np.array(
+                    [
+                        [int(left_row["responder_n"]), int(left_row["non_responder_n"])],
+                        [int(right_row["responder_n"]), int(right_row["non_responder_n"])],
+                    ]
+                )
+                raw_ps.append(float(stats.fisher_exact(table)[1]))
+                pair_rows.append((left_group, right_group))
+        adjusted_ps = _fdr_bh_adjust(raw_ps)
+        for (left_group, right_group), p_value in zip(pair_rows, adjusted_ps):
+            pairwise_rows.append(
+                {
+                    "PhaseNumber": int(phase_number),
+                    "Metric": metric_name,
+                    "threshold_pct": float(threshold_pct),
+                    "horizon_hours": float(horizon_hours),
+                    "test": "fisher_exact_fdr_bh",
+                    "group1": left_group,
+                    "group2": right_group,
+                    "p_value": float(p_value),
+                }
+            )
+
+    return summary, pd.DataFrame(omnibus_rows), pd.DataFrame(pairwise_rows)
+
+def compute_binomial_glm_group_statistics(
+    data: pd.DataFrame,
+    *,
+    phase_number: int,
+    metric_name: str,
+    success_col: str,
+    total_col: str,
+    subset_col: str | None = None,
+    subset_label: str = "subset",
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Fit count-based binomial GLMs and derive omnibus/pairwise group tests.
+
+    The model uses mouse-level success counts with the corresponding visit
+    totals as binomial weights. If available and non-degenerate, `SEX` is
+    included as a covariate. The function fits separate models per subset, for
+    example `phase_day` or `first_hours`.
+    """
+
+    if data.empty:
+        return pd.DataFrame(), pd.DataFrame()
+
+    work = data.copy()
+    work = work.loc[work[total_col].fillna(0).gt(0)].copy()
+    if work.empty:
+        return pd.DataFrame(), pd.DataFrame()
+    work["prop"] = work[success_col] / work[total_col]
+
+    subset_values = [("all", work)] if subset_col is None else [
+        (subset_value, subset_frame.copy())
+        for subset_value, subset_frame in work.groupby(subset_col, observed=True)
+    ]
+
+    omnibus_rows: list[dict[str, object]] = []
+    pairwise_rows: list[dict[str, object]] = []
+
+    for subset_value, subset_frame in subset_values:
+        subset_frame = subset_frame.copy()
+        group_order = [str(group_name) for group_name in subset_frame["Group"].astype(str).dropna().unique()]
+        categories = getattr(subset_frame["Group"].dtype, "categories", None)
+        if categories is not None:
+            group_order = [str(group_name) for group_name in categories if str(group_name) in group_order]
+        if len(group_order) < 2:
+            continue
+        reference_group = group_order[0]
+        subset_frame["Group"] = pd.Categorical(subset_frame["Group"].astype(str), categories=group_order, ordered=True)
+
+        formula = f"prop ~ C(Group, Treatment(reference='{reference_group}'))"
+        if "SEX" in subset_frame.columns and subset_frame["SEX"].dropna().astype(str).nunique() > 1:
+            formula += " + C(SEX)"
+
+        try:
+            model = smf.glm(
+                formula=formula,
+                data=subset_frame,
+                family=sm.families.Binomial(),
+                freq_weights=subset_frame[total_col].astype(float),
+            )
+            result = model.fit()
+        except Exception as exc:
+            omnibus_rows.append(
+                {
+                    "PhaseNumber": int(phase_number),
+                    "Metric": metric_name,
+                    subset_label: subset_value,
+                    "test": "binomial_glm",
+                    "p_value": np.nan,
+                    "group_n": len(group_order),
+                    "fit_failed": True,
+                    "error": str(exc),
+                }
+            )
+            continue
+
+        param_names = list(result.params.index)
+        group_param_names = [name for name in param_names if name.startswith("C(Group, Treatment(")]
+        if group_param_names:
+            restriction = np.zeros((len(group_param_names), len(param_names)), dtype=float)
+            for row_index, param_name in enumerate(group_param_names):
+                restriction[row_index, param_names.index(param_name)] = 1.0
+            omnibus_p = float(np.asarray(result.wald_test(restriction).pvalue).reshape(-1)[0])
+        else:
+            omnibus_p = np.nan
+
+        omnibus_rows.append(
+            {
+                "PhaseNumber": int(phase_number),
+                "Metric": metric_name,
+                subset_label: subset_value,
+                "test": "binomial_glm_wald",
+                "p_value": omnibus_p,
+                "group_n": len(group_order),
+                "fit_failed": False,
+                "n_obs": int(len(subset_frame)),
+            }
+        )
+
+        raw_ps: list[float] = []
+        effect_rows: list[dict[str, object]] = []
+        for left_index, left_group in enumerate(group_order):
+            for right_group in group_order[left_index + 1 :]:
+                contrast = np.zeros(len(param_names), dtype=float)
+                if left_group != reference_group:
+                    left_name = f"C(Group, Treatment(reference='{reference_group}'))[T.{left_group}]"
+                    if left_name in param_names:
+                        contrast[param_names.index(left_name)] = -1.0
+                if right_group != reference_group:
+                    right_name = f"C(Group, Treatment(reference='{reference_group}'))[T.{right_group}]"
+                    if right_name in param_names:
+                        contrast[param_names.index(right_name)] = 1.0
+                test_result = result.t_test(contrast)
+                raw_p = float(np.asarray(test_result.pvalue).reshape(-1)[0])
+                effect = float(np.asarray(test_result.effect).reshape(-1)[0])
+                raw_ps.append(raw_p)
+                effect_rows.append(
+                    {
+                        "PhaseNumber": int(phase_number),
+                        "Metric": metric_name,
+                        subset_label: subset_value,
+                        "test": "binomial_glm_pairwise",
+                        "group1": left_group,
+                        "group2": right_group,
+                        "logit_difference": effect,
+                        "odds_ratio": float(np.exp(effect)),
+                    }
+                )
+        adjusted_ps = _fdr_bh_adjust(raw_ps)
+        for row, p_value in zip(effect_rows, adjusted_ps):
+            row["p_value"] = float(p_value)
+            pairwise_rows.append(row)
+
+    return pd.DataFrame(omnibus_rows), pd.DataFrame(pairwise_rows)
+
+def compute_clustered_binomial_gee_group_statistics(
+    data: pd.DataFrame,
+    *,
+    phase_number: int,
+    metric_name: str,
+    success_col: str,
+    total_col: str,
+    cluster_col: str = "ET",
+    subset_col: str | None = None,
+    subset_label: str = "subset",
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Fit mouse-clustered binomial GEEs and derive omnibus/pairwise tests.
+
+    Compared with the simpler weighted GLM, this approach retains repeated
+    within-mouse observations, for example 1 h bins, and uses a clustered
+    sandwich covariance via GEE. This yields more conservative standard errors
+    when mice contribute many bins with correlated behavior.
+    """
+
+    if data.empty:
+        return pd.DataFrame(), pd.DataFrame()
+
+    work = data.copy()
+    work = work.loc[work[total_col].fillna(0).gt(0)].copy()
+    if work.empty:
+        return pd.DataFrame(), pd.DataFrame()
+    work["prop"] = work[success_col] / work[total_col]
+
+    subset_values = [("all", work)] if subset_col is None else [
+        (subset_value, subset_frame.copy())
+        for subset_value, subset_frame in work.groupby(subset_col, observed=True)
+    ]
+
+    omnibus_rows: list[dict[str, object]] = []
+    pairwise_rows: list[dict[str, object]] = []
+
+    for subset_value, subset_frame in subset_values:
+        subset_frame = subset_frame.copy()
+        group_order = [str(group_name) for group_name in subset_frame["Group"].astype(str).dropna().unique()]
+        categories = getattr(subset_frame["Group"].dtype, "categories", None)
+        if categories is not None:
+            group_order = [str(group_name) for group_name in categories if str(group_name) in group_order]
+        if len(group_order) < 2:
+            continue
+
+        reference_group = group_order[0]
+        subset_frame["Group"] = pd.Categorical(
+            subset_frame["Group"].astype(str),
+            categories=group_order,
+            ordered=True,
+        )
+
+        formula = f"prop ~ C(Group, Treatment(reference='{reference_group}'))"
+        if "SEX" in subset_frame.columns and subset_frame["SEX"].dropna().astype(str).nunique() > 1:
+            formula += " + C(SEX)"
+
+        try:
+            model = smf.gee(
+                formula=formula,
+                groups=cluster_col,
+                data=subset_frame,
+                family=sm.families.Binomial(),
+                weights=subset_frame[total_col].astype(float),
+                cov_struct=sm.cov_struct.Exchangeable(),
+            )
+            result = model.fit()
+        except Exception as exc:
+            omnibus_rows.append(
+                {
+                    "PhaseNumber": int(phase_number),
+                    "Metric": metric_name,
+                    subset_label: subset_value,
+                    "test": "binomial_gee",
+                    "p_value": np.nan,
+                    "group_n": len(group_order),
+                    "fit_failed": True,
+                    "error": str(exc),
+                }
+            )
+            continue
+
+        param_names = list(result.params.index)
+        group_param_names = [name for name in param_names if name.startswith("C(Group, Treatment(")]
+        if group_param_names:
+            restriction = np.zeros((len(group_param_names), len(param_names)), dtype=float)
+            for row_index, param_name in enumerate(group_param_names):
+                restriction[row_index, param_names.index(param_name)] = 1.0
+            omnibus_p = float(np.asarray(result.wald_test(restriction).pvalue).reshape(-1)[0])
+        else:
+            omnibus_p = np.nan
+
+        omnibus_rows.append(
+            {
+                "PhaseNumber": int(phase_number),
+                "Metric": metric_name,
+                subset_label: subset_value,
+                "test": "binomial_gee_wald",
+                "p_value": omnibus_p,
+                "group_n": len(group_order),
+                "fit_failed": False,
+                "n_obs": int(len(subset_frame)),
+                "cluster_n": int(subset_frame[cluster_col].astype(str).nunique()),
+            }
+        )
+
+        raw_ps: list[float] = []
+        effect_rows: list[dict[str, object]] = []
+        for left_index, left_group in enumerate(group_order):
+            for right_group in group_order[left_index + 1 :]:
+                contrast = np.zeros(len(param_names), dtype=float)
+                if left_group != reference_group:
+                    left_name = f"C(Group, Treatment(reference='{reference_group}'))[T.{left_group}]"
+                    if left_name in param_names:
+                        contrast[param_names.index(left_name)] = -1.0
+                if right_group != reference_group:
+                    right_name = f"C(Group, Treatment(reference='{reference_group}'))[T.{right_group}]"
+                    if right_name in param_names:
+                        contrast[param_names.index(right_name)] = 1.0
+                test_result = result.t_test(contrast)
+                raw_p = float(np.asarray(test_result.pvalue).reshape(-1)[0])
+                effect = float(np.asarray(test_result.effect).reshape(-1)[0])
+                raw_ps.append(raw_p)
+                effect_rows.append(
+                    {
+                        "PhaseNumber": int(phase_number),
+                        "Metric": metric_name,
+                        subset_label: subset_value,
+                        "test": "binomial_gee_pairwise",
+                        "group1": left_group,
+                        "group2": right_group,
+                        "logit_difference": effect,
+                        "odds_ratio": float(np.exp(effect)),
+                    }
+                )
+
+        adjusted_ps = _fdr_bh_adjust(raw_ps)
+        for row, p_value in zip(effect_rows, adjusted_ps):
+            row["p_value"] = float(p_value)
+            pairwise_rows.append(row)
+
+    return pd.DataFrame(omnibus_rows), pd.DataFrame(pairwise_rows)
+
 def _fdr_bh_adjust(p_values: list[float]) -> list[float]:
     """Apply Benjamini-Hochberg FDR correction to a sequence of p-values."""
 
@@ -885,24 +1423,25 @@ def compute_group_day_violin_statistics(
             }
         )
 
-        for group_name, group_frame in day_data.groupby("Group", observed=True):
-            success_count = int(group_frame["correct_visits"].sum())
-            total_count = int(group_frame["all_visits"].sum())
-            p_value = np.nan
-            if total_count > 0:
-                p_value = float(binomtest(success_count, total_count, chance_level, alternative="greater").pvalue)
-            chance_rows.append(
-                {
-                    "PhaseNumber": phase_number,
-                    "Metric": metric_name,
-                    "phase_day": int(phase_day),
-                    "Group": str(group_name),
-                    "success_count": success_count,
-                    "total_count": total_count,
-                    "chance_level": chance_level,
-                    "p_value": p_value,
-                }
-            )
+        if {"correct_visits", "all_visits"}.issubset(day_data.columns):
+            for group_name, group_frame in day_data.groupby("Group", observed=True):
+                success_count = int(group_frame["correct_visits"].sum())
+                total_count = int(group_frame["all_visits"].sum())
+                p_value = np.nan
+                if total_count > 0:
+                    p_value = float(binomtest(success_count, total_count, chance_level, alternative="greater").pvalue)
+                chance_rows.append(
+                    {
+                        "PhaseNumber": phase_number,
+                        "Metric": metric_name,
+                        "phase_day": int(phase_day),
+                        "Group": str(group_name),
+                        "success_count": success_count,
+                        "total_count": total_count,
+                        "chance_level": chance_level,
+                        "p_value": p_value,
+                    }
+                )
 
     return (
         pd.DataFrame(omnibus_rows),
