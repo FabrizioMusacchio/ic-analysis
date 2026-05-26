@@ -87,11 +87,11 @@ DEFAULT_PHASE_MAX_HOURS = {
     3: 72.0,
     4: 72.0,
 }
-DEFAULT_EXCLUDED_GROUPS = ["WT"]
+DEFAULT_EXCLUDED_GROUPS = ["WT", "Tau 1-421", "Tau 66-421"]
 DEFAULT_GROUP_RENAMES = {
     "WT": "WT",
-    "tdTomato": "tdTomato",
-    "Tau 1-441": "Tau 1-441",
+    "tdTomato": "Control",
+    "Tau 1-441": "Tau",
     "Tau 1-421": "Tau 1-421",
     "Tau 66-421": "Tau 66-421",
 }
@@ -103,16 +103,16 @@ DEFAULT_GROUP_COLORS = {
     "Tau 1-441": "#4ade80",
 }
 DEFAULT_FIGSIZE_CM = {# always a pair of (width, height)
-    "LONG_FIGSIZE_CM": (18.2, 7.4),
-    "LONG_FIGSIZE_2_CM": (15.2, 7.4),
-    "PHASE2_FIGSIZE_CM": (10.4, 7.0),
-    "MEDIUM_FIGSIZE_CM": (11.8, 7.6),
-    "MEDIUM_WIDE_FIGSIZE_CM": (12.8, 8.0),
-    "SEGMENT_FIGSIZE_CM": (12.6, 7.9),
-    "VIOLIN_FIGSIZE_CM": (5.8, 7.2),
-    "ONSET_FIGSIZE_CM": (5.8, 7.0),
-    "ACTIVITY_FIGSIZE_CM": (8.8, 8.1),
-    "WIDE_GROUP_FIGSIZE_CM": (18.2, 7.4),
+    "LONG_FIGSIZE_CM":          (18.2, 7.4),
+    "LONG_FIGSIZE_2_CM":        (15.2, 7.4),
+    "PHASE2_FIGSIZE_CM":        (10.4, 7.0),
+    "MEDIUM_FIGSIZE_CM":        (11.8, 7.6),
+    "MEDIUM_WIDE_FIGSIZE_CM":   (12.8, 8.0),
+    "SEGMENT_FIGSIZE_CM":       (12.6, 7.9),
+    "VIOLIN_FIGSIZE_CM":        (3.8, 7.2), #(5.8, 7.2),
+    "ONSET_FIGSIZE_CM":         (5.8, 7.0),
+    "ACTIVITY_FIGSIZE_CM":      (8.8, 8.1),
+    "WIDE_GROUP_FIGSIZE_CM":    (18.2, 7.4),
 }
 DEFAULT_PHASE2_PLOT_STYLE = "line"
 DEFAULT_MOUSE_DAY_START_HOUR = 6.0
@@ -145,7 +145,6 @@ USER_RATE_THRESHOLD_PCTS = [50.0, 60.0, 70.0, 80.0]
 USER_THRESHOLD_ONSET_BIN_HOURS = 1
 USER_RESPONDER_HORIZONS_HOURS = [24.0, 48.0, 72.0]
 USER_BINOMIAL_MODEL_FIRST_HOURS = 24.0
-USER_SUMMARY_COMPARISON_GROUPS = ("tdTomato", "Tau 1-441")
 USER_SUMMARY_RESPONDER_HORIZON_HOURS = 24.0
 USER_SUMMARY_FIGSIZE_CM = (8.2, 7.1)
 CM_TO_INCH = 2.54
@@ -217,6 +216,79 @@ def resolved_group_colors(
         for key, value in group_colors.items():
             resolved.setdefault(str(key), str(value))
     return resolved
+
+def render_mouse_age_at_phase1_start_plot(
+    metadata: pd.DataFrame,
+    phase_manifest: pd.DataFrame,
+    output_root: Path,
+    *,
+    group_renames: dict[str, str],
+) -> None:
+    """Plot mouse age at the observed start of phase 1 for all loaded mice.
+
+    This plot is intentionally derived from the full metadata table before any
+    later analysis exclusions are applied, so it always reflects every mouse
+    listed in `Mice.txt`.
+    """
+
+    if metadata.empty or phase_manifest.empty:
+        return
+
+    phase1_starts = (
+        phase_manifest.loc[phase_manifest["PhaseNumber"].eq(1), ["RunGroup", "PhaseStart"]]
+        .rename(columns={"PhaseStart": "Phase1Start"})
+        .copy()
+    )
+    if phase1_starts.empty:
+        return
+
+    age_table = metadata.merge(phase1_starts, on="RunGroup", how="left", validate="many_to_one").copy()
+    age_table["GroupOriginal"] = age_table["Group"].astype(str)
+    age_table["Group"] = age_table["GroupOriginal"].map(group_renames).fillna(age_table["GroupOriginal"])
+    age_table["age_days_at_phase1_start"] = (
+        age_table["Phase1Start"] - age_table["DOB"]
+    ).dt.total_seconds() / 86400.0
+    age_table["age_months_at_phase1_start"] = age_table["age_days_at_phase1_start"] / 30.4375
+    age_table = age_table.loc[age_table["age_months_at_phase1_start"].notna()].copy()
+    if age_table.empty:
+        return
+
+    preferred_groups = [str(name) for name in group_renames.values()]
+    present_groups = set(age_table["Group"].astype(str))
+    ordered_groups = [group_name for group_name in preferred_groups if group_name in present_groups]
+    ordered_groups.extend(
+        group_name for group_name in age_table["Group"].astype(str) if group_name not in ordered_groups
+    )
+    age_table["Group"] = pd.Categorical(age_table["Group"], categories=ordered_groups, ordered=True)
+    age_table["PhaseNumber"] = 1
+
+    save_table(age_table, output_root / "mouse_age_at_phase1_start_months_mouse.tsv")
+    flagged = flag_iqr_outliers(
+        age_table,
+        value_col="age_months_at_phase1_start",
+        group_cols=["Group"],
+    )
+    save_table(flagged, output_root / "mouse_age_at_phase1_start_months_mouse_with_outliers.tsv")
+    omnibus, pairwise = compute_onset_group_statistics(
+        flagged.rename(columns={"age_months_at_phase1_start": "onset_hours"}),
+        onset_col="onset_hours",
+        phase_number=1,
+        metric_name="mouse_age_at_phase1_start_months",
+        exclude_outliers=False,
+    )
+    save_table(omnibus, output_root / "mouse_age_at_phase1_start_months_omnibus_stats.tsv")
+    save_table(pairwise, output_root / "mouse_age_at_phase1_start_months_pairwise_stats.tsv")
+    plot_onset_violin(
+        flagged.rename(columns={"age_months_at_phase1_start": "onset_hours"}),
+        onset_col="onset_hours",
+        phase_display_name="Phase 1 start",
+        title_label="Mouse age at phase 1 start",
+        ylabel="Age [months]",
+        output_path=output_root / "mouse_age_at_phase1_start_months_violin.png",
+        pairwise_stats=pairwise,
+        outlier_col="is_outlier",
+        reference_line=None,
+    )
 
 def phase_origin_clock_hour(mouse_day_start_hour: float, scheduled_phase_start_hour: float) -> float:
     """Return the wall-clock hour that corresponds to phase-relative time zero."""
@@ -555,7 +627,6 @@ def _build_pl_rewarded_gee_stats(
 def render_target_group_summary_panels(
     *,
     output_root: Path,
-    comparison_groups: tuple[str, str],
     all_groups_order: tuple[str, ...],
     threshold_pcts: list[float] | tuple[float, ...],
     responder_horizon_hours: float,
@@ -563,8 +634,6 @@ def render_target_group_summary_panels(
     awake_duration_hours: float,
 ) -> None:
     """Render single-panel summary figures for targeted and all-group views."""
-
-    group_a, group_b = comparison_groups
     rewarded_day1 = _load_result_table(output_root, "phase3_rewarded_correct_corner_awake_day_rate_mouse.tsv")
     rewarded_day1 = rewarded_day1.loc[rewarded_day1["phase_day"].eq(1)].copy()
     rewarded_day1_omnibus, rewarded_day1_stats, first24h_omnibus, first24h_stats = _build_pl_rewarded_gee_stats(
@@ -589,31 +658,10 @@ def render_target_group_summary_panels(
         responder_frames.append(frame)
     responder_summary = pd.concat(responder_frames, ignore_index=True) if responder_frames else pd.DataFrame()
 
-    comparison_rewarded = _ordered_available_groups(rewarded_day1, comparison_groups)
     all_rewarded = _ordered_available_groups(rewarded_day1, all_groups_order)
-    comparison_first24h = _ordered_available_groups(first24h, comparison_groups)
     all_first24h = _ordered_available_groups(first24h, all_groups_order)
-    comparison_reversal = _ordered_available_groups(reversal_pref, comparison_groups)
     all_reversal = _ordered_available_groups(reversal_pref, all_groups_order)
-    comparison_responder = _ordered_available_groups(responder_summary, comparison_groups)
     all_responder = _ordered_available_groups(responder_summary, all_groups_order)
-
-    _save_panel_figure(
-        output_root,
-        f"{group_a}_vs_{group_b}_pl_day1_awake_rewarded_correct_corner".replace(" ", "_"),
-        lambda ax: _draw_distribution_panel(
-            ax,
-            rewarded_day1,
-            value_col="value",
-            group_order=comparison_rewarded,
-            group_colors=group_colors,
-            title="PL day 1 awake\nRewarded correct-corner rate",
-            ylabel="Rewarded correct-corner rate [%]",
-            pairwise_stats=rewarded_day1_stats,
-            as_percent=True,
-            reference_line=0.25,
-        ),
-    )
     _save_panel_figure(
         output_root,
         "all_groups_pl_day1_awake_rewarded_correct_corner",
@@ -626,22 +674,6 @@ def render_target_group_summary_panels(
             title="PL day 1 awake\nRewarded correct-corner rate",
             ylabel="Rewarded correct-corner rate [%]",
             pairwise_stats=rewarded_day1_stats,
-            as_percent=True,
-            reference_line=0.25,
-        ),
-    )
-    _save_panel_figure(
-        output_root,
-        f"{group_a}_vs_{group_b}_pl_first24h_rewarded_correct_corner".replace(" ", "_"),
-        lambda ax: _draw_distribution_panel(
-            ax,
-            first24h,
-            value_col="value",
-            group_order=comparison_first24h,
-            group_colors=group_colors,
-            title="PL first 24 h\nRewarded correct-corner rate",
-            ylabel="Rewarded correct-corner rate [%]",
-            pairwise_stats=first24h_stats,
             as_percent=True,
             reference_line=0.25,
         ),
@@ -664,19 +696,6 @@ def render_target_group_summary_panels(
     )
     _save_panel_figure(
         output_root,
-        f"{group_a}_vs_{group_b}_pl_responders_{int(responder_horizon_hours)}h".replace(" ", "_"),
-        lambda ax: _draw_responder_panel(
-            ax,
-            responder_summary,
-            group_order=comparison_responder,
-            threshold_pcts=threshold_pcts,
-            group_colors=group_colors,
-            title=f"PL responders by {int(responder_horizon_hours)} h",
-            ylabel="Responder rate [%]",
-        ),
-    )
-    _save_panel_figure(
-        output_root,
         f"all_groups_pl_responders_{int(responder_horizon_hours)}h",
         lambda ax: _draw_responder_panel(
             ax,
@@ -686,24 +705,6 @@ def render_target_group_summary_panels(
             group_colors=group_colors,
             title=f"PL responders by {int(responder_horizon_hours)} h",
             ylabel="Responder rate [%]",
-        ),
-    )
-    _save_panel_figure(
-        output_root,
-        f"{group_a}_vs_{group_b}_pr_day3_reversal_preference_index".replace(" ", "_"),
-        lambda ax: _draw_distribution_panel(
-            ax,
-            reversal_pref,
-            value_col="value",
-            group_order=comparison_reversal,
-            group_colors=group_colors,
-            title="PR day 3 awake\nReversal preference index",
-            ylabel="New / (new + previous)\n(higher = better)",
-            pairwise_stats=reversal_pref_stats,
-            pairwise_filter_column="phase_day",
-            pairwise_filter_value=3,
-            as_percent=False,
-            reference_line=0.5,
         ),
     )
     _save_panel_figure(
@@ -2243,6 +2244,12 @@ def run_analysis(
         optional_phase_names=optional_phase_names,
         drop_unmatched_visits=drop_unmatched_visits,
     )
+    render_mouse_age_at_phase1_start_plot(
+        cohort.metadata,
+        cohort.phase_manifest,
+        output_root,
+        group_renames=selected_group_renames,
+    )
     aligned_visits = attach_analysis_time_columns(
         cohort.visits,
         cohort.phase_manifest,
@@ -2514,7 +2521,6 @@ def main() -> None:
     )
     render_target_group_summary_panels(
         output_root=output_root,
-        comparison_groups=USER_SUMMARY_COMPARISON_GROUPS,
         all_groups_order=all_groups_order,
         threshold_pcts=USER_RATE_THRESHOLD_PCTS,
         responder_horizon_hours=USER_SUMMARY_RESPONDER_HORIZON_HOURS,
@@ -2524,6 +2530,9 @@ def main() -> None:
         ),
         awake_duration_hours=USER_AWAKE_DURATION_HOURS,
     )
+    
+    print(f"All summary panels rendered. Final output directory: {output_root}")
+    print("done.")
 
 # %% ENTRY POINT
 if __name__ == "__main__":

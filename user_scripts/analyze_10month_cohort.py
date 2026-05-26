@@ -148,7 +148,6 @@ USER_RESPONDER_HORIZONS_HOURS = [24.0, 48.0, 72.0]
 USER_BINOMIAL_MODEL_FIRST_HOURS = 24.0
 USER_BASE_FONT_SIZE = 10.0
 USER_EXCLUDE_VIOLIN_OUTLIERS = True
-USER_SUMMARY_COMPARISON_GROUPS = ("tdTomato", "Tau 1-441")
 USER_SUMMARY_RESPONDER_HORIZON_HOURS = 24.0
 USER_SUMMARY_FIGSIZE_CM = (16.5, 12.5)
 CM_TO_INCH = 2.54
@@ -646,7 +645,6 @@ def _save_panel_figure(
 def render_target_group_summary_panels(
     *,
     output_root: Path,
-    comparison_groups: tuple[str, str],
     all_groups_order: tuple[str, ...],
     threshold_pcts: list[float] | tuple[float, ...],
     responder_horizon_hours: float,
@@ -654,8 +652,6 @@ def render_target_group_summary_panels(
     awake_duration_hours: float,
 ) -> None:
     """Render single-panel summary figures for targeted and all-group views."""
-
-    group_a, group_b = comparison_groups
     rewarded_day1 = _load_result_table(output_root, "phase3_rewarded_correct_corner_awake_day_rate_mouse.tsv")
     rewarded_day1 = rewarded_day1.loc[rewarded_day1["phase_day"].eq(1)].copy()
     rewarded_day1_omnibus, rewarded_day1_stats, first24h_omnibus, first24h_stats = _build_pl_rewarded_gee_stats(
@@ -679,31 +675,10 @@ def render_target_group_summary_panels(
         frame = frame.loc[frame["horizon_hours"].eq(float(responder_horizon_hours))].copy()
         responder_frames.append(frame)
     responder_summary = pd.concat(responder_frames, ignore_index=True) if responder_frames else pd.DataFrame()
-    comparison_rewarded = _ordered_available_groups(rewarded_day1, comparison_groups)
     all_rewarded = _ordered_available_groups(rewarded_day1, all_groups_order)
-    comparison_first24h = _ordered_available_groups(first24h, comparison_groups)
     all_first24h = _ordered_available_groups(first24h, all_groups_order)
-    comparison_reversal = _ordered_available_groups(reversal_pref, comparison_groups)
     all_reversal = _ordered_available_groups(reversal_pref, all_groups_order)
-    comparison_responder = _ordered_available_groups(responder_summary, comparison_groups)
     all_responder = _ordered_available_groups(responder_summary, all_groups_order)
-
-    _save_panel_figure(
-        output_root,
-        f"{group_a}_vs_{group_b}_pl_day1_awake_rewarded_correct_corner".replace(" ", "_"),
-        lambda ax: _draw_distribution_panel(
-            ax,
-            rewarded_day1,
-            value_col="value",
-            group_order=comparison_rewarded,
-            group_colors=group_colors,
-            title="PL day 1 awake\nRewarded correct-corner rate",
-            ylabel="Rewarded correct-corner rate [%]",
-            pairwise_stats=rewarded_day1_stats,
-            as_percent=True,
-            reference_line=0.25,
-        ),
-    )
     _save_panel_figure(
         output_root,
         "all_groups_pl_day1_awake_rewarded_correct_corner",
@@ -723,22 +698,6 @@ def render_target_group_summary_panels(
 
     _save_panel_figure(
         output_root,
-        f"{group_a}_vs_{group_b}_pl_first24h_rewarded_correct_corner".replace(" ", "_"),
-        lambda ax: _draw_distribution_panel(
-            ax,
-            first24h,
-            value_col="value",
-            group_order=comparison_first24h,
-            group_colors=group_colors,
-            title="PL first 24 h\nRewarded correct-corner rate",
-            ylabel="Rewarded correct-corner rate [%]",
-            pairwise_stats=first24h_stats,
-            as_percent=True,
-            reference_line=0.25,
-        ),
-    )
-    _save_panel_figure(
-        output_root,
         "all_groups_pl_first24h_rewarded_correct_corner",
         lambda ax: _draw_distribution_panel(
             ax,
@@ -756,19 +715,6 @@ def render_target_group_summary_panels(
 
     _save_panel_figure(
         output_root,
-        f"{group_a}_vs_{group_b}_pl_responders_{int(responder_horizon_hours)}h".replace(" ", "_"),
-        lambda ax: _draw_responder_panel(
-            ax,
-            responder_summary,
-            group_order=comparison_responder,
-            threshold_pcts=threshold_pcts,
-            group_colors=group_colors,
-            title=f"PL responders by {int(responder_horizon_hours)} h",
-            ylabel="Responder rate [%]",
-        ),
-    )
-    _save_panel_figure(
-        output_root,
         f"all_groups_pl_responders_{int(responder_horizon_hours)}h",
         lambda ax: _draw_responder_panel(
             ax,
@@ -783,24 +729,6 @@ def render_target_group_summary_panels(
 
     _save_panel_figure(
         output_root,
-        f"{group_a}_vs_{group_b}_pr_day1_reversal_preference_index".replace(" ", "_"),
-        lambda ax: _draw_distribution_panel(
-            ax,
-            reversal_pref.loc[reversal_pref["phase_day"].eq(1)].copy(),
-            value_col="value",
-            group_order=comparison_reversal,
-            group_colors=group_colors,
-            title="PR day 1 awake\nReversal preference index",
-            ylabel="New / (new + previous)\n(higher = better)",
-            pairwise_stats=reversal_pref_stats,
-            pairwise_filter_column="phase_day",
-            pairwise_filter_value=1,
-            as_percent=False,
-            reference_line=0.5,
-        ),
-    )
-    _save_panel_figure(
-        output_root,
         "all_groups_pr_day1_reversal_preference_index",
         lambda ax: _draw_distribution_panel(
             ax,
@@ -813,24 +741,6 @@ def render_target_group_summary_panels(
             pairwise_stats=reversal_pref_stats,
             pairwise_filter_column="phase_day",
             pairwise_filter_value=1,
-            as_percent=False,
-            reference_line=0.5,
-        ),
-    )
-    _save_panel_figure(
-        output_root,
-        f"{group_a}_vs_{group_b}_pr_day3_reversal_preference_index".replace(" ", "_"),
-        lambda ax: _draw_distribution_panel(
-            ax,
-            reversal_pref.loc[reversal_pref["phase_day"].eq(3)].copy(),
-            value_col="value",
-            group_order=comparison_reversal,
-            group_colors=group_colors,
-            title="PR day 3 awake\nReversal preference index",
-            ylabel="New / (new + previous)\n(higher = better)",
-            pairwise_stats=reversal_pref_stats,
-            pairwise_filter_column="phase_day",
-            pairwise_filter_value=3,
             as_percent=False,
             reference_line=0.5,
         ),
@@ -907,7 +817,6 @@ def main() -> None:
     )
     render_target_group_summary_panels(
         output_root=output_root,
-        comparison_groups=USER_SUMMARY_COMPARISON_GROUPS,
         all_groups_order=all_groups_order,
         threshold_pcts=USER_RATE_THRESHOLD_PCTS,
         responder_horizon_hours=USER_SUMMARY_RESPONDER_HORIZON_HOURS,
