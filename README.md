@@ -26,6 +26,8 @@ on an aligned 0-266 h analysis timeline:
   tracking of visits to the previous correct corner.
 
 ## Installation
+The toolkit requires Python 3.12 or newer.
+
 Create a clean environment and install the package in editable mode:
 
 ```bash

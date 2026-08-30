@@ -27,8 +27,7 @@ For larger changes, please open or comment on an issue with:
 
 ## Development Environment
 
-The package requires Python 3.10 or newer. Python 3.12 is recommended for
-development.
+The package requires Python 3.12 or newer.
 
 ```bash
 git clone https://github.com/FabrizioMusacchio/ic-placelearning.git
