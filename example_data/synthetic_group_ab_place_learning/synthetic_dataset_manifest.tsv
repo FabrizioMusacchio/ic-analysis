@@ -1,0 +1,9 @@
+RunGroup	Group	Phase	MouseCount	VisitCount	NosepokeCount	StartHour	DurationHours
+GruppeA	Group A	Phase1	10	265	145	0.0	74.0
+GruppeA	Group A	Phase2	10	285	227	74.0	48.0
+GruppeA	Group A	Phase3	10	458	364	122.0	72.0
+GruppeA	Group A	Phase4	10	378	275	194.0	72.0
+GruppeB	Group B	Phase1	10	242	157	0.0	74.0
+GruppeB	Group B	Phase2	10	176	143	74.0	48.0
+GruppeB	Group B	Phase3	10	364	194	122.0	72.0
+GruppeB	Group B	Phase4	10	302	168	194.0	72.0
