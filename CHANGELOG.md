@@ -9,9 +9,22 @@ purposes.
 
 ---
 
+## 🚀 IntelliCage Place Learning Toolkit v0.0.2
+
+August 31, 2026
+
+Just a minor release to request Python version 3.12 as minimum requirement for the package.
+
+### 🧩 Changes
+* We set the minimum Python version to 3.12 for the package and GitHub Actions workflow.
+
+---
+
 ## 🚀 IntelliCage Place Learning Toolkit v0.0.1
 
 August 30, 2026
+
+This is just a dummy release to add a Zenodo archive for the package. The release does not change any code or documentation.
 
 ### 🗄️ Archiving
 - Archived the public `ic_placelearning` package on Zenodo for long-term preservation and citation.
