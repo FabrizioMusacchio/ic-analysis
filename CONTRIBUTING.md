@@ -1,162 +1,117 @@
 # How to Contribute
 
-Thank you for your interest in contributing to XXX. This project welcomes improvements to the code, documentation, tests, example workflows, and overall usability. The goal of XXX is to provide a robust, transparent, and reproducible interface for segmentation-based colocalization analysis in microscopy images, including ROI-based workflows, channel-wise segmentation, post hoc refinement, object measurements, and standardized result export.
+Thank you for your interest in contributing to the IntelliCage Place Learning
+Toolkit. This project welcomes improvements to the code, documentation, tests,
+synthetic example data, and analysis workflows.
 
-## Before you start
-Please check the GitHub issue tracker to see whether your idea, bug report, or enhancement has already been discussed:
+The goal of the toolkit is to provide a robust, transparent, and reproducible
+Python interface for analyzing place learning experiments conducted in
+IntelliCage.
 
-[https://github.com/FabrizioMusacchio/XXX/issues](https://github.com/FabrizioMusacchio/XXX/issues)
+## Before You Start
 
-* If a related issue exists, comment there to indicate your interest or to add relevant technical details.
-* If no issue exists, open a new one with a short description of:
-  * what you would like to change or add
-  * why it is useful in the context of XXX
-  * any thoughts on implementation, edge cases, or testing
+Please check the GitHub issue tracker to see whether your idea, bug report, or
+enhancement has already been discussed:
 
-For small fixes such as typos or minor documentation improvements, opening a pull request directly is fine.
+[https://github.com/FabrizioMusacchio/ic-placelearning/issues](https://github.com/FabrizioMusacchio/ic-placelearning/issues)
 
-## Development environment
-XXX requires **Python 3.12** and builds on standard scientific Python packages commonly used in microscopy workflows, including Cellpose, OMIO, napari, NumPy, pandas, scikit-image, tifffile, and related libraries for image analysis and result export.
+For small fixes such as typos or minor documentation improvements, opening a
+pull request directly is fine.
 
-A typical development setup using `conda` looks like this:
+For larger changes, please open or comment on an issue with:
 
-```sh
-git clone https://github.com/FabrizioMusacchio/XXX.git
-cd XXX
+- what you would like to change or add
+- why it is useful for IntelliCage place-learning analysis
+- expected input data structure and output behavior
+- edge cases, assumptions, or testing ideas
 
-conda create -n XXX-dev -c conda-forge python=3.12
-conda activate XXX-dev
+## Development Environment
 
-pip install -e .
-```
+The package requires Python 3.10 or newer. Python 3.12 is recommended for
+development.
 
-To install optional development dependencies such as testing and linting tools:
+```bash
+git clone https://github.com/FabrizioMusacchio/ic-placelearning.git
+cd ic-placelearning
 
-```sh
+conda create -n ic_placelearning python=3.12 -y
+conda activate ic_placelearning
+
 pip install -e ".[dev]"
 ```
 
-## Making changes and opening pull requests
-All code contributions should be submitted as pull requests (PRs) against the `main` branch of the repository.
+## Making Changes
+
+All code contributions should be submitted as pull requests against the `main`
+branch.
 
 A recommended workflow:
 
-1. Create a new feature branch:
+1. Create a feature branch.
+2. Implement a focused change.
+3. Add or update tests for user-visible behavior.
+4. Run the test suite locally.
+5. Open a pull request with a concise title and explanation.
 
-   ```sh
-   git checkout -b feature/my-feature
-   ```
-
-2. Implement your changes. New functions or modules should include clear docstrings explaining:
-   * their purpose
-   * expected inputs and outputs
-   * any assumptions or limitations
-3. Add tests for new functionality or bug fixes where appropriate.
-4. Push your branch and open a pull request that includes:
-   * a concise and descriptive title
-   * a brief explanation of what was changed and why
-   * references to related issues (for example “Closes #12”)
-
-Draft pull requests are welcome if you would like feedback during development.
-
-## Commit conventions
-Clear and consistent commit messages help keep the project history readable. Prefixes inspired by Conventional Commits are encouraged:
-
-* `feat:` new functionality
-* `fix:` bug fixes
-* `docs:` documentation changes
-* `refactor:` internal code restructuring without behavior changes
-* `test:` adding or modifying tests
-* `chore:` maintenance tasks or tooling updates
-
-Example:
-`fix: preserve marker labels during post hoc reanalysis`
+Clear docstrings are expected for new public functions. Please document
+assumptions about IntelliCage export structure, phase naming, timing alignment,
+or behavioral metric definitions when they affect interpretation.
 
 ## Testing
-XXX uses `pytest` for automated testing. To run the full test suite locally:
 
-```sh
+Run the full test suite with:
+
+```bash
 pytest
 ```
 
-If you add new features or fix bugs, please extend the test suite accordingly.
+The public package should maintain at least 75% coverage. Tests should be small
+and self-contained. Use the synthetic dataset generator or minimal generated
+tables instead of real experimental data.
 
-Tests should remain small and self-contained. Large microscopy datasets should not be added to the repository. Whenever possible, use synthetic arrays, small label masks, or minimal generated image stacks that exercise the behavior under test.
+## Analysis Policy Decisions
 
+Changes to metric definitions should be explicit, documented, and tested. In
+particular, please be careful with:
 
-## Notes for JOSS-related contributions
-XXX is developed with the requirements of the *Journal of Open Source Software (JOSS)* in mind. Contributions should therefore respect the following principles, which are routinely evaluated during JOSS review:
+- phase-number and phase-name mapping
+- assigned-corner logic for phase 3 and phase 4
+- rewarded correct-corner definitions
+- awake/sleep and mouse-day alignment
+- responder thresholds and onset calculations
+- statistical model assumptions and fallback behavior
 
-* **Reproducibility**
-  Behavior should be deterministic given identical inputs and parameters. Any non-deterministic behavior must be explicitly documented.
-* **Test coverage**
-  New functionality should be accompanied by tests that fail without the change and pass with it. Tests should target observable behavior rather than internal implementation details.
-* **Documentation consistency**
-  Public-facing functions must be documented in a way that is consistent with their actual behavior. Silent assumptions or undocumented side effects are discouraged.
-* **Minimal scope changes**
-  Pull requests should focus on a well-defined change. Large refactors or conceptual redesigns should be discussed in an issue before implementation.
-* **Explicit limitations**
-  Known limitations or unsupported cases should be documented rather than implicitly ignored.
+Pull requests that change these semantics should explain how old and new
+outputs differ.
 
-Following these guidelines helps ensure that XXX remains reviewable, maintainable, and suitable for long-term archival publication.
+## Data Policy
 
+Do not add private or unpublished experimental IntelliCage datasets to the
+repository. Public examples should use synthetic data or small anonymized test
+fixtures that do not expose animal-level experimental records.
 
-## Analysis policy decisions and design constraints
-XXX makes a number of explicit policy decisions when turning microscopy images and segmentation masks into colocalization results. These decisions are intentional and are meant to favor reproducibility, transparent interpretation, and downstream comparability over hidden heuristics.
+Large generated result folders should not be committed. They should be
+reproducible from scripts and synthetic input data.
 
-Key principles include:
+## Commit Conventions
 
-* **Object-based colocalization**
-  XXX evaluates colocalization from segmented objects and overlap criteria, not from raw intensity correlation. Changes to positivity logic should therefore be explicit, documented, and reflected in exported tables.
-* **Channel-wise segmentation**
-  Each analysis channel can use its own segmentation backend and filter chain. Contributions should preserve this per-channel configurability instead of hard-coding assumptions for a specific experiment.
-* **ROI-wise reproducibility**
-  ROI definitions, whole-image mode, z-cropping, and z-projection affect downstream measurements. New features should keep these analysis boundaries visible and consistently applied across masks, tables, and visualizations.
-* **Transparent result export**
-  Exported CSV and Excel columns should have stable, descriptive names. New result metrics should be documented and, where possible, accompanied by tests using small synthetic data.
-* **Explicit limitations**
-  Known limitations, backend-specific behavior, and unsupported cases should be documented rather than implicitly ignored.
+Clear commit messages help keep the project history readable. Prefixes inspired
+by Conventional Commits are encouraged:
 
-Contributions that alter or extend these policy decisions should be discussed in an issue before implementation, as such changes may affect reproducibility, compatibility with existing user scripts, or interpretation of previously exported results.
+- `feat:` new functionality
+- `fix:` bug fixes
+- `docs:` documentation changes
+- `refactor:` internal code restructuring without behavior changes
+- `test:` adding or modifying tests
+- `chore:` maintenance tasks or tooling updates
 
+Example:
 
-## Reporting bugs
-Please report bugs via the GitHub issue tracker:
+```text
+test: cover aligned phase-window metrics
+```
 
-[https://github.com/FabrizioMusacchio/XXX/issues](https://github.com/FabrizioMusacchio/XXX/issues)
+## License and Contributions
 
-Include the following information if possible:
-
-* XXX version (`pip show XXX`)
-* Python version
-* Operating system
-* Minimal steps or code snippet to reproduce the issue
-* Relevant XXX configuration blocks, for example `CellposeModelConfig`, `ColocalizationConfig`, and `RuntimeConfig`
-* If applicable, a small synthetic example, cropped image, label mask, screenshot, or exported table illustrating the problem
-
-## Requests for new analysis methods and workflow extensions
-In addition to direct code contributions via pull requests, users are encouraged to request new analysis capabilities that are not yet covered by XXX. Examples include additional colocalization rules, new object-positivity criteria, segmentation backends, prefilters, postfilters, ROI summaries, or exported object metrics.
-
-Such requests should be submitted via the GitHub issue tracker and include:
-
-* a clear description of the biological or image-analysis question
-* the expected input data structure, for example 2D, 3D, z-projected, two-channel, three-channel, or single-channel analysis
-* the desired segmentation, filtering, or colocalization behavior
-* how the requested method should be reflected in exported tables or masks
-* if available, a minimal script snippet, configuration block, screenshot, or current XXX output that illustrates the need
-
-For new analysis methods, representative example data are extremely helpful. They allow contributors to verify that the method behaves as expected, document its intended use, and add meaningful tests. When sharing data is not possible, please provide the smallest possible synthetic or cropped example that still captures the relevant behavior.
-
-Useful supporting material can be shared via:
-* temporary download links (for example institutional web shares or cloud storage)
-* publicly accessible repositories or archives
-* small synthetic arrays or masks that reproduce the requested behavior
-* expected output tables or manually curated reference masks
-
-Please do not add large microscopy datasets directly to the repository. For larger examples, use a stable external archive or provide a cropped/anonymized subset that is sufficient for testing.
-
-
-## License and contributions
-By submitting a pull request, you agree that your contributions will be released under the project’s license as specified in the repository.
-
-If you are unsure how to begin or would like to discuss a potential contribution, feel free to open an issue to start a conversation.
+By submitting a pull request, you agree that your contributions will be released
+under the project license as specified in the repository.
