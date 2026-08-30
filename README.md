@@ -134,16 +134,16 @@ common experiment timeline.
 
 
 ## Where to start
-We recommend to start with usage examples on the documentation website. The folder `user_scripts/` contains interactive scripts that are described in the documentation and can be run cell by cell in VS Code's interactive window or in a notebook-like environment. They are designed to be run with provided example datasets (download from [Zenodo](https://doi.org/10.5281/zenodo.XXXXX)) or with your own *IntelliCage* data.
+We recommend to start with usage examples on the documentation website. The folder `user_scripts/` contains interactive scripts that are described in the documentation and can be run cell by cell in VS Code's interactive window or in a notebook-like environment. They are designed to be run with provided example datasets (download from [Zenodo](https://doi.org/10.5281/zenodo.22181525)) or with your own *IntelliCage* data.
 
 ## Citation
 If you use the *IntelliCage Place Learning Toolkit* in scientific work, please cite the preprint:
 
-> Musacchio, F. and Fuhrmann, M. (2026). *IntelliCage Place Learning Toolkit: A Python toolkit for analyzing place learning experiments conducted in the IntelliCage.*. Zenodo. https://doi.org/10.5281/zenodo.XXXXXX
+> Musacchio, F. and Fuhrmann, M. (2026). *IntelliCage Place Learning Toolkit: A Python toolkit for analyzing place learning experiments conducted in the IntelliCage.*. Zenodo. https://doi.org/10.5281/zenodo.22181525
 
 <!-- Please also cite the archived IntelliCage Place Learning Toolkit software version used in your analysis:
 
-> Musacchio, F. (2026). *IntelliCage Place Learning Toolkit: A Python package for analyzing place learning experiments in the IntelliCage*. Zenodo. https://doi.org/10.5281/zenodo.20787509
+> Musacchio, F. (2026). *IntelliCage Place Learning Toolkit: A Python package for analyzing place learning experiments in the IntelliCage*. Zenodo. https://doi.org/10.5281/zenodo.22181525
 
 Zenodo software archive:
-[https://doi.org/10.5281/zenodo.20787509](https://doi.org/10.5281/zenodo.20787509) -->
+[https://doi.org/10.5281/zenodo.22181525](https://doi.org/10.5281/zenodo.22181525) -->

@@ -1,6 +1,6 @@
 cff-version: 1.2.0
 message: "If you use the IntelliCage Place Learning Toolkit in your research, please cite the archived software version used in your analysis."
-title: "IntelliCage Place Learning Toolkit"
+title: "IntelliCage Place Learning Toolkit: A Python toolkit for analyzing place learning experiments conducted in the IntelliCage."
 version: 0.0.0
 date-released: 2026-08-30
 
@@ -12,6 +12,18 @@ authors:
 repository-code: https://github.com/FabrizioMusacchio/ic-placelearning
 license: GPL-3.0-or-later
 abstract: "A Python toolkit for analyzing place learning experiments conducted in the IntelliCage."
+
+preferred-citation:
+  type: article
+  authors:
+    - family-names: Musacchio
+      given-names: Fabrizio
+      orcid: https://orcid.org/0000-0002-9043-3349
+  title: "IntelliCage Place Learning Toolkit: A Python toolkit for analyzing place learning experiments conducted in the IntelliCage"
+  journal: Zenodo
+  year: 2026
+  doi: 10.5281/zenodo.22181525
+  url: https://doi.org/10.5281/zenodo.22181525
 
 keywords:
   - IntelliCage
