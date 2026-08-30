@@ -1,11 +1,11 @@
-"""Python toolkit for IntelliCage place-learning analyses.
+"""IntelliCage Place Learning Toolkit.
 
 The package provides reusable utilities to read IntelliCage exports, harmonize
 mouse metadata with visits and nose-pokes, compute behavior metrics, and create
-poster-ready plots. The current workflow targets the BioMedX 4-month cohort but
-is structured so the same code can be reused for additional cohorts later on.
+publication-oriented plots for place-learning experiments.
 """
 
 from .loader import CohortData, load_cohort_data
 
 __all__ = ["CohortData", "load_cohort_data"]
+__version__ = "0.0.0"

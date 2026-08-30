@@ -620,6 +620,8 @@ def compute_phase_segment_rate_tables(
         awake_start_clock_hour=awake_start_clock_hour,
         awake_end_clock_hour=awake_end_clock_hour,
     )
+    if phase_visits.empty:
+        return _empty_count_tables()
     phase_visits = phase_visits.loc[phase_visits["segment_day"].between(1, max_days)].copy()
     if phase_visits.empty:
         return _empty_count_tables()
@@ -749,6 +751,8 @@ def compute_awake_day_ratio_tables(
         awake_start_clock_hour=awake_start_clock_hour,
         awake_end_clock_hour=awake_end_clock_hour,
     )
+    if phase_visits.empty:
+        return _empty_count_tables()
     phase_visits = phase_visits.loc[
         phase_visits["segment_day"].between(1, max_days) & phase_visits["segment_name"].eq("awake")
     ].copy()
