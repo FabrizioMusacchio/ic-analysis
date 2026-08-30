@@ -1,148 +1,147 @@
-# IntelliCage Place Learning experiment analysis
+# IntelliCage Place Learning Toolkit
 
-This repository contains the original MATLAB scripts and a new Python workflow
-for IntelliCage place-learning data. The first Python target is the dataset in
-`Data IntelliCage/BioMedX_4MonthCohort_2019`.
+A Python toolkit for analyzing place learning experiments conducted in
+IntelliCage.
 
-## Environment
+The package provides reusable tools to load IntelliCage text exports, merge
+mouse metadata with visit and nose-poke records, compute place-learning and
+reversal-learning metrics, and create publication-oriented summary plots.
 
-For reproducibility:
+This public repository uses synthetic example data only. Real experimental
+cohort data are intentionally not included.
+
+## Installation
+
+Create a clean environment and install the package in editable mode:
 
 ```bash
 conda create -n ic_placelearning python=3.12 -y
 conda activate ic_placelearning
-conda install -y ipykernel matplotlib pandas numpy scipy scikit-learn statsmodels pingouin
+pip install -e .
 ```
 
-## Python workflow
-
-The Python package now lives at the project root and is split into:
-
-- `intellicage_place_learning/loader.py`
-  Reads `Mice.txt`, `Visits.txt`, and `Nosepokes.txt`, merges them, and adds
-  analysis-friendly columns.
-- `intellicage_place_learning/metrics.py`
-  Computes binned activity and place-learning summaries on the mouse and group
-  level.
-- `intellicage_place_learning/plotting.py`
-  Creates group-wise summary figures for poster preparation.
-- `user_scripts/analyze_4month_cohort.py`
-  Normal user script with editable in-file settings that calls the pipeline as
-  a regular Python function.
-- `user_scripts/analyze_4month_cohort_cli.py`
-  Optional command-line wrapper that keeps the old argparse-based CLI
-  available.
-
-Run the complete analysis with the normal user script:
+For development and documentation work:
 
 ```bash
-conda run -n ic_placelearning python user_scripts/analyze_4month_cohort.py
+pip install -e ".[dev]"
 ```
 
-If you prefer the CLI wrapper with explicit options:
+## Package Structure
 
-```bash
-conda run -n ic_placelearning python user_scripts/analyze_4month_cohort_cli.py \
-  --bin-hours 1 2 \
-  --phase2-secondary-metric lick_positive_visits \
-  --spread-metric sem \
-  --plot-style line \
-  --phase2-plot-style line
-```
+The import package is `ic_placelearning`:
 
-Optional phase-time limits can be passed explicitly, for example:
+- `ic_placelearning.loader`
+  Reads IntelliCage-style `Mice.txt`, `Visits.txt`, and `Nosepokes.txt` files,
+  merges metadata, and adds experiment-relative timing and event annotations.
+- `ic_placelearning.metrics`
+  Computes activity, place-learning, reversal-learning, responder, onset, and
+  group-comparison summary tables.
+- `ic_placelearning.plotting`
+  Creates group-level and mouse-level figures from the computed metric tables.
 
-```bash
-conda run -n ic_placelearning python user_scripts/analyze_4month_cohort_cli.py \
-  --bin-hours 2 \
-  --phase-max-hours 4=73.8913
-```
-
-The user script currently defaults to:
-
-- excluding `WT` from the poster-oriented analysis
-- keeping the original group names unchanged
-- aligning the experiment to mouse day 0 at `06:00`
-- using a `12 h` awake / `12 h` sleep cycle
-- using the protocol phase starts `0 h`, `74 h`, `122 h`, `194 h`, `266 h`
-
-The same workflow can also be imported and called from another Python script:
+Example import:
 
 ```python
-from user_scripts.analyze_4month_cohort import run_analysis
+from pathlib import Path
 
-run_analysis(bin_hours=[1, 2], excluded_groups=["WT"])
+from ic_placelearning.loader import load_cohort_data
+
+cohort = load_cohort_data(Path("example_data/synthetic_group_ab_place_learning"))
+print(cohort.visits.head())
 ```
 
-## Outputs
+## Synthetic Example Data
 
-The results directory is always created relative to the selected dataset root.
-For the 4-month cohort, the default output folder is:
+The repository includes a small synthetic IntelliCage-style dataset at:
 
-`Data IntelliCage/BioMedX_4MonthCohort_2019/results/`
+```text
+example_data/synthetic_group_ab_place_learning
+```
 
-The output folder contains:
+It contains two groups with ten pseudo-mice each:
 
-- merged visit and nose-poke tables
-- mouse metadata and a phase manifest
-- suggested and per-run phase-duration limit tables
-- phase-wise median activity tables and plots
-- binned summary tables for each requested bin size
-- plots for:
-  - total visits across the full experiment
-  - phase-2 adaptation and full-experiment phase-2 control plots
-  - phase-3 and phase-4 rewarded correct-corner visit counts
-  - phase-3 and phase-4 correct-corner visit rates
-  - phase-3 and phase-4 correct NP visit rates
-  - phase-3 and phase-4 rewarded correct-corner visit rates
-  - phase-4 reversal corner-component plots
-  - all-group overlays for visit counts and place-learning rates
+- `Group A`: simulated stronger place learning and better reversal adaptation.
+- `Group B`: simulated weaker place learning and stronger phase-4
+  perseveration at the previous correct corner.
 
-Plot filenames now include both the phase prefix and the plotted metric, for
-example `phase3_rewarded_correct_corner_visit_rate_*`.
+The dataset follows the same folder layout expected from real IntelliCage
+exports:
 
-## Metric definitions
+```text
+GruppeA/
+  Mice.txt
+  Phase1/IntelliCage/Visits.txt
+  Phase1/IntelliCage/Nosepokes.txt
+  ...
+GruppeB/
+  Mice.txt
+  Phase1/IntelliCage/Visits.txt
+  Phase1/IntelliCage/Nosepokes.txt
+  ...
+```
 
-The Python workflow keeps four place-learning metrics in parallel:
+To regenerate the example data:
+
+```bash
+conda run -n ic_placelearning python additional_scripts/generate_synthetic_group_ab_data.py --overwrite
+```
+
+## Demo Analysis
+
+Run the public synthetic-data workflow with:
+
+```bash
+conda run -n ic_placelearning python user_scripts/analyze_synthetic_group_ab.py
+```
+
+The script writes compact result tables and figures to:
+
+```text
+example_data/synthetic_group_ab_place_learning/results
+```
+
+Generated result folders are ignored by Git. They can be safely recreated from
+the synthetic input data and analysis script.
+
+## Metric Definitions
+
+The workflow keeps several place-learning metrics in parallel:
 
 - `correct_corner_visit_rate`
-  `visits in assigned correct corner / all visits`
+  Visits in the assigned correct corner divided by all visits.
 - `correct_np_visit_rate`
-  `visits in assigned correct corner with nose-poke / all visits`
+  Correct-corner visits with at least one nose-poke divided by all visits.
 - `rewarded_correct_corner_visit_rate`
-  `visits in assigned correct corner with nose-poke and licking / all visits`
+  Correct-corner visits with nose-poke and licking divided by all visits.
 - `matlab_placeerror_only`
-  Legacy MATLAB-compatible definition: `PlaceError == 0` only.
+  Legacy-compatible definition based on `PlaceError == 0`.
 
-For phase 2, the default secondary metric is `lick_positive_visits`, because it
-is usually easier to interpret for learning/adaptation than the raw lick count.
-
-For phase 4, additional reversal summaries separate:
+For phase 4, the toolkit also separates:
 
 - visits to the new correct corner
 - visits to the previous correct corner
 - visits to the neutral incorrect corners
 
-## Phase naming
+## Time Alignment
 
-Plot titles use the short phase labels:
+The analysis distinguishes raw IntelliCage phase files from an aligned analysis
+timeline:
 
-- `Phase 1 -> Free Hab`
-- `Phase 2 -> NPA`
-- `Phase 3 -> PL`
-- `Phase 4 -> PR`
+- phase files preserve the observed IntelliCage export structure
+- analysis windows can follow a protocol schedule in elapsed hours
+- mouse-day and awake/sleep windows can be configured for plotting and daily
+  summaries
 
-The filenames keep the explicit `phase1` to `phase4` prefixes.
+This makes runs with slightly different recording boundaries comparable on a
+common experiment timeline.
 
-## Time alignment
+## Testing
 
-The analysis distinguishes between the raw IntelliCage file phases and a second
-poster-oriented aligned timeline:
+Run the test suite with coverage:
 
-- day 0 starts at the configured mouse-day onset, default `06:00`
-- the aligned phase windows follow the protocol schedule rather than the exact
-  file boundary
-- awake periods remain unshaded and sleep periods are shaded light grey
+```bash
+conda run -n ic_placelearning pytest
+```
 
-This makes datasets with slightly different placement times or slightly delayed
-phase switches directly comparable on a common experimental timeline.
+The project currently targets at least 75% coverage for the public
+`ic_placelearning` package.
