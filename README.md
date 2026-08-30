@@ -12,7 +12,7 @@ on an aligned 0-266 h analysis timeline:
 
 ![IntelliCage place-learning protocol](figures/intellicage_place_learning_protocol.jpg)
 
-- Phase 1, Free Hab: 0-74 h, free habituation and exploration of all corners.
+- Phase 1, Free Hab: 0-74 h, free habituation and exploration of all corners. This may vary from 48-74 h depending on the experiment design.
 - Phase 2, NPA: 74-122 h, nose-poke adaptation and licking behavior.
 - Phase 3, PL: 122-194 h, place learning with an assigned rewarded correct
   corner.
