@@ -23,6 +23,7 @@ os.environ.setdefault("MPLCONFIGDIR", str(_MPL_CONFIG_DIR))
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 import numpy as np
 import pandas as pd
@@ -48,6 +49,7 @@ ROLE_COLORS = {
     "Neutral corner 1": "#7f7f7f",
     "Neutral corner 2": "#b0b0b0",
 }
+DRINKING_VISIT_COLOR = "#f28e2b"
 CM_TO_INCH = 2.54
 DEFAULT_FIGURE_SIZE_CM = {
     "LONG_FIGSIZE_CM": (18.2, 7.4),
@@ -852,7 +854,7 @@ def plot_phase2_adaptation(
             secondary_group,
             y_col="mean_value",
             spread_col=spread_col,
-            color=color,
+            color=DRINKING_VISIT_COLOR,
             label=secondary_label,
             plot_style="line",
             linewidth=1.0,
@@ -875,8 +877,8 @@ def plot_phase2_adaptation(
             x + width / 2.0,
             secondary_group["mean_value"],
             width=width,
-            color=color,
-            edgecolor=color,
+            color=DRINKING_VISIT_COLOR,
+            edgecolor=DRINKING_VISIT_COLOR,
             yerr=secondary_group["sem_value"],
             capsize=2,
             label=secondary_label,
@@ -889,6 +891,114 @@ def plot_phase2_adaptation(
     ax.set_ylabel(_wrap_axis_label("Mean count per mouse and bin"))
     ax.grid(axis="y", alpha=0.25)
     _place_external_legend(ax, ncol=1)
+    _save_figure(fig, output_path)
+
+def plot_phase2_adaptation_groups(
+    primary_summary: pd.DataFrame,
+    secondary_summary: pd.DataFrame,
+    *,
+    group_names: list[str],
+    bin_hours: int,
+    output_path: Path,
+    secondary_label: str,
+    phase_display_name: str,
+    x_end_hours: float | None = None,
+    origin_clock_hour: float = 8.0,
+    awake_start_clock_hour: float = 6.0,
+    awake_end_clock_hour: float = 18.0,
+    starting_day: int = 1,
+) -> None:
+    """Plot the phase-2 adaptation metric for all groups in one combined panel."""
+
+    available_groups = [
+        group_name
+        for group_name in group_names
+        if group_name in set(primary_summary["Group"].astype(str))
+        and group_name in set(secondary_summary["Group"].astype(str))
+    ]
+    if not available_groups:
+        return
+
+    _prepare_output_path(output_path)
+    fig, ax = plt.subplots(figsize=_figsize_cm(*PHASE2_FIGSIZE_CM))
+    spread_col = "sem_value"
+
+    max_hour = float(
+        max(
+            primary_summary["bin_end_hours"].max(),
+            secondary_summary["bin_end_hours"].max(),
+        )
+        if x_end_hours is None
+        else float(x_end_hours)
+    )
+    y_max = 0.0
+    for group_name in available_groups:
+        primary_group = primary_summary.loc[primary_summary["Group"].astype(str).eq(group_name)].copy()
+        secondary_group = secondary_summary.loc[secondary_summary["Group"].astype(str).eq(group_name)].copy()
+        if primary_group.empty or secondary_group.empty:
+            continue
+        group_color = _group_color(group_name)
+        y_max = max(
+            y_max,
+            float((primary_group["mean_value"] + primary_group[spread_col]).max()),
+            float((secondary_group["mean_value"] + secondary_group[spread_col]).max()),
+        )
+        ax.plot(
+            primary_group["bin_center_hours"],
+            primary_group["mean_value"],
+            color=group_color,
+            linestyle="--",
+            linewidth=1.0,
+            alpha=0.65,
+            zorder=3,
+        )
+        ax.plot(
+            secondary_group["bin_center_hours"],
+            secondary_group["mean_value"],
+            color=group_color,
+            linestyle="-",
+            linewidth=1.0,
+            alpha=0.95,
+            zorder=4,
+        )
+
+    x_start = _phase_plot_x_start(origin_clock_hour, awake_start_clock_hour)
+    ax.set_xlim(x_start, max_hour)
+    ax.set_ylim(0, _count_axis_upper(y_max))
+    _add_awake_sleep_background(
+        ax,
+        x_end=max_hour,
+        x_start=x_start,
+        origin_clock_hour=origin_clock_hour,
+        awake_start_clock_hour=awake_start_clock_hour,
+        awake_end_clock_hour=awake_end_clock_hour,
+    )
+    _add_day_annotations(ax, x_end=max_hour, x_start=x_start, label_every_days=1, starting_day=starting_day)
+    _add_single_phase_band(ax, phase_number=2, label=phase_display_name, start_hours=0.0, end_hours=max_hour)
+
+    ax.set_title(_wrap_title(f"Visits vs {secondary_label.lower()} ({phase_display_name}, {bin_hours} h bins)"))
+    ax.set_xlabel("Hours since start of phase 2")
+    ax.set_ylabel(_wrap_axis_label("Mean count per mouse and bin"))
+    ax.grid(axis="y", alpha=0.25)
+
+    legend_handles = [
+        Line2D([0], [0], color=_group_color(group_name), linestyle="-", linewidth=1.2, label=group_name)
+        for group_name in available_groups
+    ]
+    legend_handles.extend(
+        [
+            Line2D([0], [0], color="#000000", linestyle="--", linewidth=1.2, label="All visits"),
+            Line2D([0], [0], color="#000000", linestyle="-", linewidth=1.2, label=secondary_label),
+        ]
+    )
+    ax.legend(
+        handles=legend_handles,
+        frameon=False,
+        ncol=1,
+        loc="upper left",
+        bbox_to_anchor=(1.01, 1.0),
+        borderaxespad=0.0,
+    )
     _save_figure(fig, output_path)
 
 def plot_phase_learning_counts(
@@ -1280,7 +1390,7 @@ def plot_experiment_dual_metric_bars(
             secondary_group,
             y_col="mean_value",
             spread_col=spread_col,
-            color=color,
+            color=DRINKING_VISIT_COLOR,
             label=secondary_label,
             plot_style="line",
             linewidth=1.0,
@@ -1303,8 +1413,8 @@ def plot_experiment_dual_metric_bars(
             x + width / 2.0,
             secondary_group["mean_value"],
             width=width,
-            color=color,
-            edgecolor=color,
+            color=DRINKING_VISIT_COLOR,
+            edgecolor=DRINKING_VISIT_COLOR,
             yerr=secondary_group["sem_value"],
             capsize=2,
             label=secondary_label,
@@ -1317,6 +1427,112 @@ def plot_experiment_dual_metric_bars(
     ax.set_ylabel(_wrap_axis_label("Mean count per mouse and bin"))
     ax.grid(axis="y", alpha=0.25)
     _place_legend(ax, y_anchor=0.76)
+    _save_figure(fig, output_path)
+
+def plot_experiment_dual_metric_groups(
+    primary_summary: pd.DataFrame,
+    secondary_summary: pd.DataFrame,
+    *,
+    group_names: list[str],
+    bin_hours: int,
+    output_path: Path,
+    secondary_label: str,
+    phase_window_table: pd.DataFrame,
+    phase_display_names: dict[int, str],
+    origin_clock_hour: float = 6.0,
+    awake_start_clock_hour: float = 6.0,
+    awake_end_clock_hour: float = 18.0,
+) -> None:
+    """Plot all-groups full-experiment dual metrics with reduced legend semantics."""
+
+    if primary_summary.empty or secondary_summary.empty:
+        return
+
+    available_groups = [
+        group_name
+        for group_name in group_names
+        if group_name in set(primary_summary["Group"].astype(str))
+        and group_name in set(secondary_summary["Group"].astype(str))
+    ]
+    if not available_groups:
+        return
+
+    _prepare_output_path(output_path)
+    fig, ax = plt.subplots(figsize=_figsize_cm(*LONG_FIGSIZE_2_CM))
+    max_hour = float(
+        max(
+            primary_summary["bin_end_hours"].max(),
+            secondary_summary["bin_end_hours"].max(),
+        )
+    )
+    spread_col = "sem_value"
+    y_max = 0.0
+    for group_name in available_groups:
+        primary_group = primary_summary.loc[primary_summary["Group"].astype(str).eq(group_name)].copy()
+        secondary_group = secondary_summary.loc[secondary_summary["Group"].astype(str).eq(group_name)].copy()
+        if primary_group.empty or secondary_group.empty:
+            continue
+        y_max = max(
+            y_max,
+            float((primary_group["mean_value"] + primary_group[spread_col]).max()),
+            float((secondary_group["mean_value"] + secondary_group[spread_col]).max()),
+        )
+        group_color = _group_color(group_name)
+        ax.plot(
+            primary_group["bin_center_hours"],
+            primary_group["mean_value"],
+            color=group_color,
+            linestyle="--",
+            linewidth=1.0,
+            alpha=0.8,
+            zorder=3,
+        )
+        ax.plot(
+            secondary_group["bin_center_hours"],
+            secondary_group["mean_value"],
+            color=group_color,
+            linestyle="-",
+            linewidth=1.0,
+            alpha=0.95,
+            zorder=4,
+        )
+
+    ax.set_xlim(0, max_hour)
+    ax.set_ylim(0, _count_axis_upper(y_max))
+    _add_awake_sleep_background(
+        ax,
+        x_end=max_hour,
+        x_start=0.0,
+        origin_clock_hour=origin_clock_hour,
+        awake_start_clock_hour=awake_start_clock_hour,
+        awake_end_clock_hour=awake_end_clock_hour,
+    )
+    _add_day_annotations(ax, x_end=max_hour, x_start=0.0, label_every_days=1, starting_day=0, min_label_width_hours=12.0)
+    _add_phase_band(ax, phase_window_table, phase_display_names=phase_display_names)
+
+    ax.set_title(_wrap_title(f"Visits vs {secondary_label.lower()} across all phases by group ({bin_hours} h bins)"))
+    ax.set_xlabel("Elapsed experimental time [hours]")
+    ax.set_ylabel(_wrap_axis_label("Mean count per mouse and bin"))
+    ax.grid(axis="y", alpha=0.25)
+
+    legend_handles = [
+        Line2D([0], [0], color=_group_color(group_name), linestyle="-", linewidth=1.2, label=group_name)
+        for group_name in available_groups
+    ]
+    legend_handles.extend(
+        [
+            Line2D([0], [0], color="#000000", linestyle="--", linewidth=1.2, label="All visits"),
+            Line2D([0], [0], color="#000000", linestyle="-", linewidth=1.2, label=secondary_label),
+        ]
+    )
+    ax.legend(
+        handles=legend_handles,
+        frameon=False,
+        ncol=1,
+        loc="upper left",
+        bbox_to_anchor=(1.01, 1.0),
+        borderaxespad=0.0,
+    )
     _save_figure(fig, output_path)
 
 def plot_phase4_reversal_components(
