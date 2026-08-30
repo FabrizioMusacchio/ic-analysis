@@ -6,6 +6,19 @@ The package provides reusable tools to load IntelliCage text exports, merge mous
 
 This public repository uses synthetic example data only. Real experimental cohort data are intentionally not included.
 
+## Experiment protocol
+The default place-learning workflow follows a four-phase IntelliCage protocol
+on an aligned 0-266 h analysis timeline:
+
+![IntelliCage place-learning protocol](figures/intellicage_place_learning_protocol.jpg)
+
+- Phase 1, Free Hab: 0-74 h, free habituation and exploration of all corners.
+- Phase 2, NPA: 74-122 h, nose-poke adaptation and licking behavior.
+- Phase 3, PL: 122-194 h, place learning with an assigned rewarded correct
+  corner.
+- Phase 4, PR: 194-266 h, place reversal with a new rewarded corner and
+  tracking of visits to the previous correct corner.
+
 ## Installation
 Create a clean environment and install the package in editable mode:
 
