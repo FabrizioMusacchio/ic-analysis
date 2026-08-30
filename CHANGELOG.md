@@ -13,6 +13,14 @@ purposes.
 
 ---
 
+## 🚀 IntelliCage Place Learning Toolkit v0.0.4
+
+August 31, 2026
+
+Just a dummy release to correct a wrong version number on PyPI. The release does not change any code or documentation.
+
+---
+
 ## 🚀 IntelliCage Place Learning Toolkit v0.0.3
 
 August 31, 2026

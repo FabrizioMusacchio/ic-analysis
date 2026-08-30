@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ic-placelearning"
-version = "0.0.3"
+version = "0.0.4"
 description = "A Python toolkit for analyzing place learning experiments conducted in the IntelliCage."
 readme = "README.md"
 requires-python = ">=3.12"
