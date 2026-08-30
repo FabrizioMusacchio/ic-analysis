@@ -1,4 +1,9 @@
-"""Run the IntelliCage place-learning workflow on the synthetic Group A/B data."""
+"""Run the IntelliCage place-learning workflow on the synthetic 
+Group A/B data.
+
+author: Fabrizio Musacchio
+date: Aug 2026
+"""
 # %% IMPORTS
 from __future__ import annotations
 
@@ -30,7 +35,6 @@ from ic_placelearning.plotting import (
     plot_phase_learning_rate_groups,
     set_group_colors,
     set_figure_size_presets)
-
 # %% PARAMETERS AND DEFAULTS
 USER_DATASET_ROOT = PROJECT_ROOT / "example_data" / "synthetic_group_ab_place_learning"
 USER_RESULTS_SUBDIR = Path("results")
@@ -68,6 +72,7 @@ USER_RESPONDER_HORIZONS_HOURS = [24.0, 48.0, 72.0]
 USER_BINOMIAL_MODEL_FIRST_HOURS = 24.0
 USER_SUMMARY_RESPONDER_HORIZON_HOURS = 24.0
 
+# %% SOME HELPER FUNCTIONS
 def save_table(dataframe, output_path: Path) -> None:
     """Save a DataFrame as a tab-separated text file."""
 
@@ -91,7 +96,6 @@ def apply_demo_group_names(dataframe):
     renamed["Group"] = renamed["Group"].astype("category")
     renamed["Group"] = renamed["Group"].cat.set_categories(list(USER_GROUP_RENAMES.values()), ordered=True)
     return renamed
-
 # %% MAIN FUNCTION
 def main() -> None:
     """Run a compact synthetic Group A/B demo analysis."""
@@ -188,3 +192,4 @@ def main() -> None:
 # %% ENTRY POINT
 if __name__ == "__main__":
     main()
+# %% END
