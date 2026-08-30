@@ -3,6 +3,9 @@
 The functions in this module create analysis-ready tables for time-binned
 trajectories, correct-visit rates, phase-wise activity summaries, and helper
 metadata such as robust common phase-duration recommendations.
+
+author: Fabrizio Musacchio
+date: May 2026
 """
 # %% IMPORTS
 from __future__ import annotations
@@ -17,7 +20,6 @@ import statsmodels.api as sm
 import statsmodels.formula.api as smf
 from statsmodels.stats.multicomp import pairwise_tukeyhsd
 from statsmodels.stats.multitest import multipletests
-
 # %%  TYPE ALIASES
 SpreadMetric = Literal["sem", "std"]
 
@@ -61,8 +63,7 @@ def flag_iqr_outliers(
             continue
         flagged.loc[subgroup_index, "is_outlier"] = (
             flagged.loc[subgroup_index, value_col].lt(lower)
-            | flagged.loc[subgroup_index, value_col].gt(upper)
-        ).fillna(False)
+            | flagged.loc[subgroup_index, value_col].gt(upper)).fillna(False)
     return flagged
 
 def infer_phase_boundaries(phase_manifest: pd.DataFrame) -> dict[int, float]:
@@ -71,12 +72,10 @@ def infer_phase_boundaries(phase_manifest: pd.DataFrame) -> dict[int, float]:
     experiment_starts = (
         phase_manifest.loc[phase_manifest["PhaseNumber"].eq(1), ["RunGroup", "PhaseStart"]]
         .rename(columns={"PhaseStart": "ExperimentStart"})
-        .copy()
-    )
+        .copy())
     aligned = phase_manifest.merge(experiment_starts, on="RunGroup", how="left", validate="many_to_one")
     aligned["phase_start_hour"] = (
-        aligned["PhaseStart"] - aligned["ExperimentStart"]
-    ).dt.total_seconds() / 3600.0
+        aligned["PhaseStart"] - aligned["ExperimentStart"]).dt.total_seconds() / 3600.0
     boundaries = aligned.groupby("PhaseNumber", observed=True)["phase_start_hour"].median().to_dict()
     return {int(key): float(value) for key, value in boundaries.items()}
 
@@ -90,8 +89,7 @@ def build_phase_time_limit_table(phase_manifest: pd.DataFrame) -> pd.DataFrame:
 
     manifest = phase_manifest.copy()
     manifest["duration_hours"] = (
-        manifest["PhaseEnd"] - manifest["PhaseStart"]
-    ).dt.total_seconds() / 3600.0
+        manifest["PhaseEnd"] - manifest["PhaseStart"]).dt.total_seconds() / 3600.0
 
     rows: list[dict[str, float | int | bool]] = []
     for phase_number, phase_data in manifest.groupby("PhaseNumber", observed=True):
@@ -112,8 +110,7 @@ def build_phase_time_limit_table(phase_manifest: pd.DataFrame) -> pd.DataFrame:
                     "upper_outlier_fence_hours": upper_fence,
                     "is_duration_outlier": bool(row["duration_hours"] > upper_fence) if iqr > 0 else False,
                     "recommended_common_limit_hours": recommended,
-                }
-            )
+                })
     return pd.DataFrame(rows).sort_values(["PhaseNumber", "RunGroup"]).reset_index(drop=True)
 
 def suggest_common_phase_limits(phase_manifest: pd.DataFrame) -> dict[int, float]:
@@ -124,8 +121,7 @@ def suggest_common_phase_limits(phase_manifest: pd.DataFrame) -> dict[int, float
         table.groupby("PhaseNumber", observed=True)["recommended_common_limit_hours"]
         .first()
         .astype(float)
-        .to_dict()
-    )
+        .to_dict())
 
 def filter_visits_by_phase_limits(
     visits: pd.DataFrame,
@@ -140,8 +136,7 @@ def filter_visits_by_phase_limits(
     for phase_number, max_hours in phase_max_hours.items():
         keep_mask &= ~(
             filtered["AnalysisPhaseNumber"].eq(int(phase_number))
-            & filtered["analysis_phase_elapsed_hours"].gt(float(max_hours))
-        )
+            & filtered["analysis_phase_elapsed_hours"].gt(float(max_hours)))
     return filtered.loc[keep_mask].copy()
 
 def build_analysis_phase_window_table(
@@ -166,8 +161,7 @@ def build_analysis_phase_window_table(
                 "start_hours": start_hour,
                 "end_hours": min(float(next_start), global_end_hour),
                 "duration_hours": min(float(next_start), global_end_hour) - float(start_hour),
-            }
-        )
+            })
     return pd.DataFrame(rows)
 
 def _empty_count_tables() -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -182,9 +176,7 @@ def _empty_count_tables() -> tuple[pd.DataFrame, pd.DataFrame]:
             "bin_start_hours",
             "bin_end_hours",
             "bin_center_hours",
-            "value",
-        ]
-    )
+            "value"])
     empty_summary = pd.DataFrame(
         columns=[
             "Group",
@@ -195,9 +187,7 @@ def _empty_count_tables() -> tuple[pd.DataFrame, pd.DataFrame]:
             "median_value",
             "std_value",
             "sem_value",
-            "mouse_n",
-        ]
-    )
+            "mouse_n"])
     return empty_mouse, empty_summary
 
 def _summarize_mouse_values(mouse_bins: pd.DataFrame, value_col: str = "value") -> pd.DataFrame:
@@ -212,10 +202,7 @@ def _summarize_mouse_values(mouse_bins: pd.DataFrame, value_col: str = "value") 
                 "mean": "mean_value",
                 "median": "median_value",
                 "std": "std_value",
-                "count": "mouse_n",
-            }
-        )
-    )
+                "count": "mouse_n"}))
     summary["std_value"] = summary["std_value"].fillna(0.0)
     summary["sem_value"] = summary["std_value"] / np.sqrt(summary["mouse_n"].clip(lower=1))
     return summary
@@ -257,16 +244,14 @@ def _prepare_count_bins(
     mouse_counts = (
         work.groupby(["Group", "ET", "ETLabel", "SEX", "bin_start_hours"], observed=True)[value_col]
         .sum()
-        .reset_index(name="value")
-    )
+        .reset_index(name="value"))
     mice = work.loc[:, ["Group", "ET", "ETLabel", "SEX"]].drop_duplicates().reset_index(drop=True)
     full_index = _build_complete_mouse_bin_frame(mice, float(work[time_col].max()), bin_hours)
     mouse_bins = full_index.merge(
         mouse_counts,
         on=["Group", "ET", "ETLabel", "SEX", "bin_start_hours"],
         how="left",
-        validate="one_to_one",
-    )
+        validate="one_to_one")
     mouse_bins["value"] = mouse_bins["value"].fillna(0.0)
     summary = _summarize_mouse_values(mouse_bins)
     summary["bin_end_hours"] = summary["bin_start_hours"] + float(bin_hours)
@@ -294,12 +279,7 @@ def _prepare_rate_bins(
     work["bin_start_hours"] = np.floor(work[time_col] / float(bin_hours)) * float(bin_hours)
     grouped = (
         work.groupby(["Group", "ET", "ETLabel", "SEX", "bin_start_hours"], observed=True)
-        .agg(
-            correct_visits=(success_col, "sum"),
-            all_visits=("VisitID", "size"),
-        )
-        .reset_index()
-    )
+        .agg(correct_visits=(success_col, "sum"), all_visits=("VisitID", "size")).reset_index())
     grouped["value"] = grouped["correct_visits"] / grouped["all_visits"]
 
     mice = work.loc[:, ["Group", "ET", "ETLabel", "SEX"]].drop_duplicates().reset_index(drop=True)
@@ -308,8 +288,7 @@ def _prepare_rate_bins(
         grouped,
         on=["Group", "ET", "ETLabel", "SEX", "bin_start_hours"],
         how="left",
-        validate="one_to_one",
-    )
+        validate="one_to_one")
     mouse_bins["all_visits"] = mouse_bins["all_visits"].fillna(0.0)
     mouse_bins["correct_visits"] = mouse_bins["correct_visits"].fillna(0.0)
     mouse_bins["value"] = mouse_bins["value"].where(mouse_bins["all_visits"].gt(0), np.nan)
@@ -321,9 +300,7 @@ def _prepare_rate_bins(
             mean_correct_visits=("correct_visits", "mean"),
             mean_all_visits=("all_visits", "mean"),
             contributing_mouse_n=("value", lambda values: int(values.notna().sum())),
-        )
-        .reset_index()
-    )
+        ).reset_index())
     summary = summary.merge(visit_summary, on=["Group", "bin_start_hours"], how="left", validate="one_to_one")
     summary["bin_end_hours"] = summary["bin_start_hours"] + float(bin_hours)
     summary["bin_center_hours"] = summary["bin_start_hours"] + float(bin_hours) / 2.0
@@ -386,24 +363,21 @@ def compute_phase2_adaptation_bins(
     lick_positive_bins = _prepare_count_bins(
         drink_visits,
         time_col="analysis_phase_elapsed_hours",
-        bin_hours=bin_hours,
-    )
+        bin_hours=bin_hours)
 
     lick_counts = phase2.copy()
     lick_counts["_value"] = lick_counts["LickNumber"].fillna(0).astype(float)
     lick_count_bins = _prepare_count_bins(
         lick_counts,
         time_col="analysis_phase_elapsed_hours",
-        bin_hours=bin_hours,
-    )
+        bin_hours=bin_hours)
 
     chosen_secondary = lick_positive_bins if secondary_metric == "lick_positive_visits" else lick_count_bins
     return {
         "visits": visit_bins,
         "drinking_metric": chosen_secondary,
         "lick_positive_visits": lick_positive_bins,
-        "lick_count": lick_count_bins,
-    }
+        "lick_count": lick_count_bins}
 
 def compute_place_learning_count_bins(
     visits: pd.DataFrame,
@@ -420,8 +394,7 @@ def compute_place_learning_count_bins(
     return _prepare_count_bins(
         phase_visits,
         time_col="analysis_phase_elapsed_hours",
-        bin_hours=bin_hours,
-    )
+        bin_hours=bin_hours)
 
 def compute_phase_visit_count_bins(
     visits: pd.DataFrame,
@@ -436,8 +409,7 @@ def compute_phase_visit_count_bins(
     return _prepare_count_bins(
         phase_visits,
         time_col="analysis_phase_elapsed_hours",
-        bin_hours=bin_hours,
-    )
+        bin_hours=bin_hours)
 
 def compute_place_learning_rate_bins(
     visits: pd.DataFrame,
@@ -453,8 +425,7 @@ def compute_place_learning_rate_bins(
         phase_visits,
         time_col="analysis_phase_elapsed_hours",
         bin_hours=bin_hours,
-        success_col=success_col,
-    )
+        success_col=success_col)
 
 def compute_phase4_reversal_rate_bins(
     visits: pd.DataFrame,
@@ -472,8 +443,7 @@ def compute_phase4_reversal_rate_bins(
                 continue
             neutrals = [
                 corner for corner in (1, 2, 3, 4)
-                if corner not in {int(row.CornerPhase3), int(row.CornerPhase4)}
-            ]
+                if corner not in {int(row.CornerPhase3), int(row.CornerPhase4)}]
             if len(neutrals) != 2:
                 continue
             if int(row.Corner) == neutrals[0]:
@@ -488,27 +458,22 @@ def compute_phase4_reversal_rate_bins(
             phase4,
             phase_number=4,
             bin_hours=bin_hours,
-            success_col="correct_corner_visit",
-        ),
+            success_col="correct_corner_visit"),
         "previous_correct_corner": compute_place_learning_rate_bins(
             phase4,
             phase_number=4,
             bin_hours=bin_hours,
-            success_col="previous_correct_corner_visit",
-        ),
+            success_col="previous_correct_corner_visit"),
         "neutral_incorrect_corner_1": compute_place_learning_rate_bins(
             phase4,
             phase_number=4,
             bin_hours=bin_hours,
-            success_col="neutral_incorrect_corner_1_visit",
-        ),
+            success_col="neutral_incorrect_corner_1_visit"),
         "neutral_incorrect_corner_2": compute_place_learning_rate_bins(
             phase4,
             phase_number=4,
             bin_hours=bin_hours,
-            success_col="neutral_incorrect_corner_2_visit",
-        ),
-    }
+            success_col="neutral_incorrect_corner_2_visit"),}
 
 def compute_phase4_reversal_count_bins(
     visits: pd.DataFrame,
@@ -526,8 +491,7 @@ def compute_phase4_reversal_count_bins(
                 continue
             neutrals = [
                 corner for corner in (1, 2, 3, 4)
-                if corner not in {int(row.CornerPhase3), int(row.CornerPhase4)}
-            ]
+                if corner not in {int(row.CornerPhase3), int(row.CornerPhase4)}]
             if len(neutrals) != 2:
                 continue
             if int(row.Corner) == neutrals[0]:
@@ -561,8 +525,7 @@ def compute_phase4_reversal_count_bins(
             phase_number=4,
             bin_hours=bin_hours,
             success_col="neutral_incorrect_corner_2_visit",
-        ),
-    }
+        ),}
 
 def _phase_segment_table(
     visits: pd.DataFrame,
@@ -583,22 +546,13 @@ def _phase_segment_table(
     phase_visits["segment_day"] = np.floor(phase_visits["mouse_day_aligned_hours"] / 24.0).astype(int) + 1
     phase_visits["segment_clock_hour"] = np.mod(phase_visits["mouse_day_aligned_hours"], 24.0)
     awake_duration = awake_end_clock_hour - awake_start_clock_hour
-    phase_visits["segment_name"] = np.where(
-        phase_visits["segment_clock_hour"] < awake_duration,
-        "awake",
-        "sleep",
-    )
-    phase_visits["segment_order"] = (phase_visits["segment_day"] - 1) * 2 + np.where(
-        phase_visits["segment_name"].eq("awake"),
-        1,
-        2,
-    )
+    phase_visits["segment_name"] = np.where(phase_visits["segment_clock_hour"] < awake_duration, "awake", "sleep",)
+    phase_visits["segment_order"] = (phase_visits["segment_day"] - 1) * 2 + np.where(phase_visits["segment_name"].eq("awake"), 1, 2)
     phase_visits["segment_label"] = (
         "Day "
         + phase_visits["segment_day"].astype(str)
         + " "
-        + phase_visits["segment_name"].astype(str)
-    )
+        + phase_visits["segment_name"].astype(str))
     return phase_visits
 
 def compute_phase_segment_rate_tables(
@@ -618,8 +572,7 @@ def compute_phase_segment_rate_tables(
         phase_number=phase_number,
         origin_clock_hour=origin_clock_hour,
         awake_start_clock_hour=awake_start_clock_hour,
-        awake_end_clock_hour=awake_end_clock_hour,
-    )
+        awake_end_clock_hour=awake_end_clock_hour)
     if phase_visits.empty:
         return _empty_count_tables()
     phase_visits = phase_visits.loc[phase_visits["segment_day"].between(1, max_days)].copy()
@@ -629,14 +582,7 @@ def compute_phase_segment_rate_tables(
     grouped = (
         phase_visits.groupby(
             ["Group", "ET", "ETLabel", "SEX", "segment_day", "segment_name", "segment_order", "segment_label"],
-            observed=True,
-        )
-        .agg(
-            correct_visits=(success_col, "sum"),
-            all_visits=("VisitID", "size"),
-        )
-        .reset_index()
-    )
+            observed=True,).agg(correct_visits=(success_col, "sum"), all_visits=("VisitID", "size"),).reset_index())
     grouped["value"] = grouped["correct_visits"] / grouped["all_visits"]
 
     mice = phase_visits.loc[:, ["Group", "ET", "ETLabel", "SEX"]].drop_duplicates().reset_index(drop=True)
@@ -648,16 +594,14 @@ def compute_phase_segment_rate_tables(
                 "segment_name": "awake",
                 "segment_order": (day - 1) * 2 + 1,
                 "segment_label": f"Day {day} awake",
-            }
-        )
+            })
         segment_rows.append(
             {
                 "segment_day": day,
                 "segment_name": "sleep",
                 "segment_order": (day - 1) * 2 + 2,
                 "segment_label": f"Day {day} sleep",
-            }
-        )
+            })
     segment_frame = pd.DataFrame(segment_rows)
     mice["__key"] = 1
     segment_frame["__key"] = 1
@@ -666,8 +610,7 @@ def compute_phase_segment_rate_tables(
         grouped,
         on=["Group", "ET", "ETLabel", "SEX", "segment_day", "segment_name", "segment_order", "segment_label"],
         how="left",
-        validate="one_to_one",
-    )
+        validate="one_to_one")
     mouse_table["all_visits"] = mouse_table["all_visits"].fillna(0.0)
     mouse_table["correct_visits"] = mouse_table["correct_visits"].fillna(0.0)
     mouse_table["value"] = mouse_table["value"].where(mouse_table["all_visits"].gt(0), np.nan)
@@ -682,9 +625,7 @@ def compute_phase_segment_rate_tables(
             contributing_mouse_n=("value", lambda values: int(values.notna().sum())),
             mean_correct_visits=("correct_visits", "mean"),
             mean_all_visits=("all_visits", "mean"),
-        )
-        .reset_index()
-    )
+        ).reset_index())
     summary["std_value"] = summary["std_value"].fillna(0.0)
     summary["sem_value"] = summary["std_value"] / np.sqrt(summary["mouse_n"].clip(lower=1))
     return mouse_table, summary
@@ -708,8 +649,7 @@ def compute_awake_day_rate_tables(
         origin_clock_hour=origin_clock_hour,
         awake_start_clock_hour=awake_start_clock_hour,
         awake_end_clock_hour=awake_end_clock_hour,
-        max_days=max_days,
-    )
+        max_days=max_days)
     mouse_table = mouse_table.loc[mouse_table["segment_name"].eq("awake")].copy()
     summary = summary.loc[summary["segment_name"].eq("awake")].copy()
     mouse_table = mouse_table.rename(
@@ -717,17 +657,13 @@ def compute_awake_day_rate_tables(
             "segment_day": "phase_day",
             "segment_name": "segment",
             "segment_order": "segment_order",
-            "segment_label": "segment_label",
-        }
-    )
+            "segment_label": "segment_label"})
     summary = summary.rename(
         columns={
             "segment_day": "phase_day",
             "segment_name": "segment",
             "segment_order": "segment_order",
-            "segment_label": "segment_label",
-        }
-    )
+            "segment_label": "segment_label"})
     return mouse_table, summary
 
 def compute_awake_day_ratio_tables(
@@ -749,30 +685,21 @@ def compute_awake_day_ratio_tables(
         phase_number=phase_number,
         origin_clock_hour=origin_clock_hour,
         awake_start_clock_hour=awake_start_clock_hour,
-        awake_end_clock_hour=awake_end_clock_hour,
-    )
+        awake_end_clock_hour=awake_end_clock_hour)
     if phase_visits.empty:
         return _empty_count_tables()
-    phase_visits = phase_visits.loc[
-        phase_visits["segment_day"].between(1, max_days) & phase_visits["segment_name"].eq("awake")
-    ].copy()
+    phase_visits = phase_visits.loc[phase_visits["segment_day"].between(1, max_days) & phase_visits["segment_name"].eq("awake")].copy()
     if phase_visits.empty:
         return _empty_count_tables()
 
     grouped = (
         phase_visits.groupby(
             ["Group", "ET", "ETLabel", "SEX", "segment_day", "segment_name", "segment_order", "segment_label"],
-            observed=True,
-        )
-        .agg(
-            numerator_count=(numerator_col, "sum"),
-            denominator_count=(denominator_col, "sum"),
-        )
-        .reset_index()
-    )
+            observed=True)
+        .agg(numerator_count=(numerator_col, "sum"),
+            denominator_count=(denominator_col, "sum"),).reset_index())
     grouped["value"] = (grouped["numerator_count"] + float(pseudocount)) / (
-        grouped["denominator_count"] + float(pseudocount)
-    )
+        grouped["denominator_count"] + float(pseudocount))
     if pseudocount == 0.0:
         grouped["value"] = grouped["value"].where(grouped["denominator_count"].gt(0), np.nan)
 
@@ -786,8 +713,7 @@ def compute_awake_day_ratio_tables(
                 "segment_label": f"Day {day} awake",
             }
             for day in range(1, max_days + 1)
-        ]
-    )
+        ])
     mice["__key"] = 1
     day_frame["__key"] = 1
     full_index = mice.merge(day_frame, on="__key", how="outer").drop(columns="__key")
@@ -795,8 +721,7 @@ def compute_awake_day_ratio_tables(
         grouped,
         on=["Group", "ET", "ETLabel", "SEX", "segment_day", "segment_name", "segment_order", "segment_label"],
         how="left",
-        validate="one_to_one",
-    )
+        validate="one_to_one")
     mouse_table["numerator_count"] = mouse_table["numerator_count"].fillna(0.0)
     mouse_table["denominator_count"] = mouse_table["denominator_count"].fillna(0.0)
     if pseudocount == 0.0:
@@ -809,8 +734,7 @@ def compute_awake_day_ratio_tables(
         columns={
             "segment_day": "phase_day",
             "segment_name": "segment",
-        }
-    )
+        })
 
     summary = (
         mouse_table.groupby(["Group", "phase_day", "segment", "segment_order", "segment_label"], observed=True)
@@ -822,9 +746,7 @@ def compute_awake_day_ratio_tables(
             contributing_mouse_n=("value", lambda values: int(values.notna().sum())),
             mean_numerator_count=("numerator_count", "mean"),
             mean_denominator_count=("denominator_count", "mean"),
-        )
-        .reset_index()
-    )
+        ).reset_index())
     summary["std_value"] = summary["std_value"].fillna(0.0)
     summary["sem_value"] = summary["std_value"] / np.sqrt(summary["mouse_n"].clip(lower=1))
     return mouse_table, summary
@@ -846,8 +768,7 @@ def compute_first_hours_rate_table(
     phase_visits = visits.loc[
         visits["AnalysisPhaseNumber"].eq(phase_number)
         & visits["analysis_phase_elapsed_hours"].ge(0.0)
-        & visits["analysis_phase_elapsed_hours"].lt(float(first_hours))
-    ].copy()
+        & visits["analysis_phase_elapsed_hours"].lt(float(first_hours))].copy()
     if phase_visits.empty:
         return pd.DataFrame()
 
@@ -855,15 +776,11 @@ def compute_first_hours_rate_table(
         phase_visits.groupby(["Group", "ET", "ETLabel", "SEX"], observed=True)
         .agg(
             correct_visits=(success_col, "sum"),
-            all_visits=("VisitID", "size"),
-        )
-        .reset_index()
-    )
+            all_visits=("VisitID", "size")).reset_index())
     grouped["value"] = np.where(
         grouped["all_visits"].gt(0),
         grouped["correct_visits"] / grouped["all_visits"],
-        np.nan,
-    )
+        np.nan)
     grouped["PhaseNumber"] = int(phase_number)
     grouped["first_hours"] = float(first_hours)
     return grouped
@@ -896,8 +813,7 @@ def compute_threshold_responder_table(
                     "SEX": row["SEX"],
                     "onset_hours": onset,
                     "reached_criterion": reached,
-                }
-            )
+                })
     return pd.DataFrame(rows)
 
 def compute_responder_group_statistics(
@@ -920,16 +836,12 @@ def compute_responder_group_statistics(
         responder_table.groupby(["PhaseNumber", "threshold_pct", "horizon_hours", "Group"], observed=True)
         .agg(
             responder_n=("reached_criterion", lambda values: int(pd.Series(values).fillna(False).astype(bool).sum())),
-            mouse_n=("ET", "nunique"),
-        )
-        .reset_index()
-    )
+            mouse_n=("ET", "nunique")).reset_index())
     summary["non_responder_n"] = summary["mouse_n"] - summary["responder_n"]
     summary["responder_rate"] = np.where(
         summary["mouse_n"].gt(0),
         summary["responder_n"] / summary["mouse_n"],
-        np.nan,
-    )
+        np.nan)
 
     omnibus_rows: list[dict[str, object]] = []
     pairwise_rows: list[dict[str, object]] = []
@@ -960,8 +872,7 @@ def compute_responder_group_statistics(
                 "test": omnibus_test,
                 "p_value": float(omnibus_p),
                 "group_n": len(groups),
-            }
-        )
+            })
 
         raw_ps: list[float] = []
         pair_rows: list[tuple[str, str]] = []
@@ -973,8 +884,7 @@ def compute_responder_group_statistics(
                     [
                         [int(left_row["responder_n"]), int(left_row["non_responder_n"])],
                         [int(right_row["responder_n"]), int(right_row["non_responder_n"])],
-                    ]
-                )
+                    ])
                 raw_ps.append(float(stats.fisher_exact(table)[1]))
                 pair_rows.append((left_group, right_group))
         adjusted_ps = _fdr_bh_adjust(raw_ps)
@@ -989,8 +899,7 @@ def compute_responder_group_statistics(
                     "group1": left_group,
                     "group2": right_group,
                     "p_value": float(p_value),
-                }
-            )
+                })
 
     return summary, pd.DataFrame(omnibus_rows), pd.DataFrame(pairwise_rows)
 
@@ -1023,8 +932,7 @@ def compute_binomial_glm_group_statistics(
 
     subset_values = [("all", work)] if subset_col is None else [
         (subset_value, subset_frame.copy())
-        for subset_value, subset_frame in work.groupby(subset_col, observed=True)
-    ]
+        for subset_value, subset_frame in work.groupby(subset_col, observed=True)]
 
     omnibus_rows: list[dict[str, object]] = []
     pairwise_rows: list[dict[str, object]] = []
@@ -1049,8 +957,7 @@ def compute_binomial_glm_group_statistics(
                 formula=formula,
                 data=subset_frame,
                 family=sm.families.Binomial(),
-                freq_weights=subset_frame[total_col].astype(float),
-            )
+                freq_weights=subset_frame[total_col].astype(float))
             result = model.fit()
         except Exception as exc:
             omnibus_rows.append(
@@ -1063,8 +970,7 @@ def compute_binomial_glm_group_statistics(
                     "group_n": len(group_order),
                     "fit_failed": True,
                     "error": str(exc),
-                }
-            )
+                })
             continue
 
         param_names = list(result.params.index)
@@ -1087,8 +993,7 @@ def compute_binomial_glm_group_statistics(
                 "group_n": len(group_order),
                 "fit_failed": False,
                 "n_obs": int(len(subset_frame)),
-            }
-        )
+            })
 
         raw_ps: list[float] = []
         effect_rows: list[dict[str, object]] = []
@@ -1117,8 +1022,7 @@ def compute_binomial_glm_group_statistics(
                         "group2": right_group,
                         "logit_difference": effect,
                         "odds_ratio": float(np.exp(effect)),
-                    }
-                )
+                    })
         adjusted_ps = _fdr_bh_adjust(raw_ps)
         for row, p_value in zip(effect_rows, adjusted_ps):
             row["p_value"] = float(p_value)
@@ -1156,8 +1060,7 @@ def compute_clustered_binomial_gee_group_statistics(
 
     subset_values = [("all", work)] if subset_col is None else [
         (subset_value, subset_frame.copy())
-        for subset_value, subset_frame in work.groupby(subset_col, observed=True)
-    ]
+        for subset_value, subset_frame in work.groupby(subset_col, observed=True)]
 
     omnibus_rows: list[dict[str, object]] = []
     pairwise_rows: list[dict[str, object]] = []
@@ -1175,8 +1078,7 @@ def compute_clustered_binomial_gee_group_statistics(
         subset_frame["Group"] = pd.Categorical(
             subset_frame["Group"].astype(str),
             categories=group_order,
-            ordered=True,
-        )
+            ordered=True)
 
         formula = f"prop ~ C(Group, Treatment(reference='{reference_group}'))"
         if "SEX" in subset_frame.columns and subset_frame["SEX"].dropna().astype(str).nunique() > 1:
@@ -1189,8 +1091,7 @@ def compute_clustered_binomial_gee_group_statistics(
                 data=subset_frame,
                 family=sm.families.Binomial(),
                 weights=subset_frame[total_col].astype(float),
-                cov_struct=sm.cov_struct.Exchangeable(),
-            )
+                cov_struct=sm.cov_struct.Exchangeable())
             result = model.fit()
         except Exception as exc:
             omnibus_rows.append(
@@ -1203,8 +1104,7 @@ def compute_clustered_binomial_gee_group_statistics(
                     "group_n": len(group_order),
                     "fit_failed": True,
                     "error": str(exc),
-                }
-            )
+                })
             continue
 
         param_names = list(result.params.index)
@@ -1228,8 +1128,7 @@ def compute_clustered_binomial_gee_group_statistics(
                 "fit_failed": False,
                 "n_obs": int(len(subset_frame)),
                 "cluster_n": int(subset_frame[cluster_col].astype(str).nunique()),
-            }
-        )
+            })
 
         raw_ps: list[float] = []
         effect_rows: list[dict[str, object]] = []
@@ -1258,8 +1157,7 @@ def compute_clustered_binomial_gee_group_statistics(
                         "group2": right_group,
                         "logit_difference": effect,
                         "odds_ratio": float(np.exp(effect)),
-                    }
-                )
+                    })
 
         adjusted_ps = _fdr_bh_adjust(raw_ps)
         for row, p_value in zip(effect_rows, adjusted_ps):
@@ -1298,8 +1196,7 @@ def compute_group_day_violin_statistics(
     for phase_day, day_data in phase_data.groupby("phase_day", observed=True):
         grouped = {
             str(group_name): group_frame["value"].dropna().to_numpy(dtype=float)
-            for group_name, group_frame in day_data.groupby("Group", observed=True)
-        }
+            for group_name, group_frame in day_data.groupby("Group", observed=True)}
         grouped = {key: values for key, values in grouped.items() if len(values) > 0}
         if len(grouped) < 2:
             continue
@@ -1326,8 +1223,7 @@ def compute_group_day_violin_statistics(
                         grouped[group_names[0]],
                         grouped[group_names[1]],
                         equal_var=bool(levene_p > 0.05) if not np.isnan(levene_p) else True,
-                    ).pvalue
-                )
+                    ).pvalue)
                 omnibus_test = "ttest_ind"
                 pairwise_rows.append(
                     {
@@ -1338,15 +1234,13 @@ def compute_group_day_violin_statistics(
                         "group1": group_names[0],
                         "group2": group_names[1],
                         "p_value": float(omnibus_p),
-                    }
-                )
+                    })
             else:
                 omnibus_p = float(stats.f_oneway(*grouped.values()).pvalue)
                 omnibus_test = "anova"
                 tukey = pairwise_tukeyhsd(
                     endog=day_data.loc[day_data["value"].notna(), "value"].to_numpy(),
-                    groups=day_data.loc[day_data["value"].notna(), "Group"].astype(str).to_numpy(),
-                )
+                    groups=day_data.loc[day_data["value"].notna(), "Group"].astype(str).to_numpy(),)
                 tukey_table = pd.DataFrame(tukey._results_table.data[1:], columns=tukey._results_table.data[0])
                 tukey_table["group1"] = tukey_table["group1"].astype(str)
                 tukey_table["group2"] = tukey_table["group2"].astype(str)
@@ -1361,8 +1255,7 @@ def compute_group_day_violin_statistics(
                             "group1": row["group1"],
                             "group2": row["group2"],
                             "p_value": float(row["p_value"]),
-                        }
-                    )
+                        })
         else:
             group_names = list(grouped)
             if len(grouped) == 2:
@@ -1370,9 +1263,7 @@ def compute_group_day_violin_statistics(
                     stats.mannwhitneyu(
                         grouped[group_names[0]],
                         grouped[group_names[1]],
-                        alternative="two-sided",
-                    ).pvalue
-                )
+                        alternative="two-sided").pvalue)
                 omnibus_test = "mannwhitney"
                 pairwise_rows.append(
                     {
@@ -1383,8 +1274,7 @@ def compute_group_day_violin_statistics(
                         "group1": group_names[0],
                         "group2": group_names[1],
                         "p_value": float(omnibus_p),
-                    }
-                )
+                    })
             else:
                 omnibus_p = float(stats.kruskal(*grouped.values()).pvalue)
                 omnibus_test = "kruskal"
@@ -1397,10 +1287,7 @@ def compute_group_day_violin_statistics(
                                 stats.mannwhitneyu(
                                     grouped[left_group],
                                     grouped[right_group],
-                                    alternative="two-sided",
-                                ).pvalue
-                            )
-                        )
+                                    alternative="two-sided",).pvalue))
                         pairs.append((left_group, right_group))
                 adjusted = _fdr_bh_adjust(raw_ps)
                 for (left_group, right_group), p_value in zip(pairs, adjusted):
@@ -1413,8 +1300,7 @@ def compute_group_day_violin_statistics(
                             "group1": left_group,
                             "group2": right_group,
                             "p_value": float(p_value),
-                        }
-                    )
+                        })
 
         omnibus_rows.append(
             {
@@ -1424,8 +1310,7 @@ def compute_group_day_violin_statistics(
                 "test": omnibus_test,
                 "p_value": float(omnibus_p),
                 "group_n": len(grouped),
-            }
-        )
+            })
 
         if {"correct_visits", "all_visits"}.issubset(day_data.columns):
             for group_name, group_frame in day_data.groupby("Group", observed=True):
@@ -1444,14 +1329,12 @@ def compute_group_day_violin_statistics(
                         "total_count": total_count,
                         "chance_level": chance_level,
                         "p_value": p_value,
-                    }
-                )
+                    })
 
     return (
         pd.DataFrame(omnibus_rows),
         pd.DataFrame(pairwise_rows),
-        pd.DataFrame(chance_rows),
-    )
+        pd.DataFrame(chance_rows))
 
 def compute_role_cumulative_curves(
     visits: pd.DataFrame,
@@ -1475,8 +1358,7 @@ def compute_role_cumulative_curves(
     phase_visits["combined_phase_elapsed_hours"] = phase_visits["analysis_experiment_elapsed_hours"] - float(phase3_start)
     phase_visits = phase_visits.loc[
         phase_visits["AnalysisPhaseNumber"].between(1, 4)
-        & phase_visits["combined_phase_elapsed_hours"].le(144.0)
-    ].copy()
+        & phase_visits["combined_phase_elapsed_hours"].le(144.0)].copy()
     if phase_visits.empty:
         return pd.DataFrame(), pd.DataFrame()
 
@@ -1491,15 +1373,12 @@ def compute_role_cumulative_curves(
             int(pl_corner): "PL target corner",
             int(pr_corner): "PR target corner",
             int(neutrals[0]): "Neutral corner 1",
-            int(neutrals[1]): "Neutral corner 2",
-        }
+            int(neutrals[1]): "Neutral corner 2"}
         return role_map.get(int(row["Corner"]))
 
     phase_visits["corner_role"] = phase_visits.apply(role_for_row, axis=1)
     phase_visits = phase_visits.loc[phase_visits["corner_role"].notna()].copy()
-    visible_phase_visits = phase_visits.loc[
-        phase_visits["combined_phase_elapsed_hours"].between(-float(pre_phase_hours), 144.0, inclusive="both")
-    ].copy()
+    visible_phase_visits = phase_visits.loc[phase_visits["combined_phase_elapsed_hours"].between(-float(pre_phase_hours), 144.0, inclusive="both")].copy()
     if visible_phase_visits.empty:
         return pd.DataFrame(), pd.DataFrame()
     role_levels = ["PL target corner", "PR target corner", "Neutral corner 1", "Neutral corner 2"]
@@ -1519,9 +1398,7 @@ def compute_role_cumulative_curves(
                     np.array([min_time], dtype=float),
                     visible_group_data["combined_phase_elapsed_hours"].to_numpy(dtype=float),
                     np.array([max_time], dtype=float),
-                )
-            )
-        )
+                )))
         timeline.sort()
         if len(timeline) == 0:
             continue
@@ -1537,12 +1414,7 @@ def compute_role_cumulative_curves(
                 mouse_data[f"cum__{role_name}"] = mouse_data["corner_role"].eq(role_name).astype(float).cumsum()
 
             collapsed = (
-                mouse_data.groupby("combined_phase_elapsed_hours", observed=True)[
-                    ["cumulative_all_visits", *[f"cum__{role_name}" for role_name in role_levels]]
-                ]
-                .max()
-                .sort_index()
-            )
+                mouse_data.groupby("combined_phase_elapsed_hours", observed=True)[["cumulative_all_visits", *[f"cum__{role_name}" for role_name in role_levels]]].max().sort_index())
             expanded = collapsed.reindex(timeline).ffill().fillna(0.0)
             expanded = expanded.reset_index().rename(columns={"index": "bin_start_hours", "combined_phase_elapsed_hours": "bin_start_hours"})
             expanded["bin_start_hours"] = timeline
@@ -1568,40 +1440,32 @@ def compute_role_cumulative_curves(
                             "cumulative_value": float(role_values[idx]),
                             "cumulative_all_visits": float(total_values[idx]),
                             "relative_cumulative_value": float(relative_values[idx]) if not np.isnan(relative_values[idx]) else np.nan,
-                        }
-                    )
+                        })
 
     mouse_counts = pd.DataFrame(mouse_rows)
     if mouse_counts.empty:
         return pd.DataFrame(), pd.DataFrame()
 
     absolute_summary = (
-        mouse_counts.groupby(["Group", "corner_role", "bin_start_hours", "bin_end_hours", "bin_center_hours"], observed=True)[
-            "cumulative_value"
-        ]
+        mouse_counts.groupby(["Group", "corner_role", "bin_start_hours", "bin_end_hours", "bin_center_hours"], observed=True)["cumulative_value"]
         .agg(["mean", "median", "std", "count"])
         .reset_index()
-        .rename(columns={"mean": "mean_value", "median": "median_value", "std": "std_value", "count": "mouse_n"})
-    )
+        .rename(columns={"mean": "mean_value", "median": "median_value", "std": "std_value", "count": "mouse_n"}))
     absolute_summary["std_value"] = absolute_summary["std_value"].fillna(0.0)
     absolute_summary["sem_value"] = absolute_summary["std_value"] / np.sqrt(absolute_summary["mouse_n"].clip(lower=1))
 
     relative_summary = (
-        mouse_counts.groupby(["Group", "corner_role", "bin_start_hours", "bin_end_hours", "bin_center_hours"], observed=True)[
-            "relative_cumulative_value"
-        ]
+        mouse_counts.groupby(["Group", "corner_role", "bin_start_hours", "bin_end_hours", "bin_center_hours"], observed=True)["relative_cumulative_value"]
         .agg(["mean", "median", "std", "count"])
         .reset_index()
-        .rename(columns={"mean": "mean_value", "median": "median_value", "std": "std_value", "count": "mouse_n"})
-    )
+        .rename(columns={"mean": "mean_value", "median": "median_value", "std": "std_value", "count": "mouse_n"}))
     relative_summary["std_value"] = relative_summary["std_value"].fillna(0.0)
     relative_summary["sem_value"] = relative_summary["std_value"] / np.sqrt(relative_summary["mouse_n"].clip(lower=1))
     return mouse_counts, absolute_summary.merge(
         relative_summary,
         on=["Group", "corner_role", "bin_start_hours", "bin_end_hours", "bin_center_hours"],
         how="left",
-        suffixes=("_absolute", "_relative"),
-    )
+        suffixes=("_absolute", "_relative"))
 
 def compute_time_window_learning_curves(
     visits: pd.DataFrame,
@@ -1623,8 +1487,7 @@ def compute_time_window_learning_curves(
     curve_rows: list[dict[str, object]] = []
     onset_rows: list[dict[str, object]] = []
     for (group_name, et, et_label, sex), mouse_data in phase_visits.groupby(
-        ["Group", "ET", "ETLabel", "SEX"], observed=True
-    ):
+        ["Group", "ET", "ETLabel", "SEX"], observed=True):
         mouse_data = mouse_data.sort_values("analysis_phase_elapsed_hours").copy()
         max_hour = float(mouse_data["analysis_phase_elapsed_hours"].max())
         if max_hour < window_hours:
@@ -1652,8 +1515,7 @@ def compute_time_window_learning_curves(
                     "all_visits": total_visits,
                     "correct_visits": success_count,
                     "value": probability,
-                }
-            )
+                })
         onset_hour = np.nan
         for index in range(0, max(0, len(probabilities) - consecutive_windows + 1)):
             candidate = probabilities[index : index + consecutive_windows]
@@ -1667,8 +1529,7 @@ def compute_time_window_learning_curves(
                 "ETLabel": str(et_label),
                 "SEX": sex,
                 "onset_hours": onset_hour,
-            }
-        )
+            })
 
     curve_table = pd.DataFrame(curve_rows)
     onset_table = pd.DataFrame(onset_rows)
@@ -1678,8 +1539,7 @@ def compute_time_window_learning_curves(
         curve_table.groupby(["Group", "window_start_hours", "window_end_hours", "window_center_hours"], observed=True)["value"]
         .agg(["mean", "median", "std", "count"])
         .reset_index()
-        .rename(columns={"mean": "mean_value", "median": "median_value", "std": "std_value", "count": "mouse_n"})
-    )
+        .rename(columns={"mean": "mean_value", "median": "median_value", "std": "std_value", "count": "mouse_n"}))
     summary["std_value"] = summary["std_value"].fillna(0.0)
     summary["sem_value"] = summary["std_value"] / np.sqrt(summary["mouse_n"].clip(lower=1))
     return curve_table, summary, onset_table
@@ -1703,8 +1563,7 @@ def compute_visit_window_learning_curves(
     curve_rows: list[dict[str, object]] = []
     onset_rows: list[dict[str, object]] = []
     for (group_name, et, et_label, sex), mouse_data in phase_visits.groupby(
-        ["Group", "ET", "ETLabel", "SEX"], observed=True
-    ):
+        ["Group", "ET", "ETLabel", "SEX"], observed=True):
         mouse_data = mouse_data.sort_values("Start").copy().reset_index(drop=True)
         successes = mouse_data[success_col].astype(int).to_numpy(dtype=int)
         probabilities: list[float] = []
@@ -1731,8 +1590,7 @@ def compute_visit_window_learning_curves(
                     "all_visits": total_visits,
                     "correct_visits": success_count,
                     "value": probability,
-                }
-            )
+                })
         onset_visit = np.nan
         for index in range(0, max(0, len(probabilities) - consecutive_windows + 1)):
             candidate = probabilities[index : index + consecutive_windows]
@@ -1746,8 +1604,7 @@ def compute_visit_window_learning_curves(
                 "ETLabel": str(et_label),
                 "SEX": sex,
                 "onset_visit": onset_visit,
-            }
-        )
+            })
 
     curve_table = pd.DataFrame(curve_rows)
     onset_table = pd.DataFrame(onset_rows)
@@ -1757,8 +1614,7 @@ def compute_visit_window_learning_curves(
         curve_table.groupby(["Group", "window_start_visit", "window_end_visit", "window_center_visit"], observed=True)["value"]
         .agg(["mean", "median", "std", "count"])
         .reset_index()
-        .rename(columns={"mean": "mean_value", "median": "median_value", "std": "std_value", "count": "mouse_n"})
-    )
+        .rename(columns={"mean": "mean_value", "median": "median_value", "std": "std_value", "count": "mouse_n"}))
     summary["std_value"] = summary["std_value"].fillna(0.0)
     summary["sem_value"] = summary["std_value"] / np.sqrt(summary["mouse_n"].clip(lower=1))
     return curve_table, summary, onset_table
@@ -1781,8 +1637,7 @@ def compute_onset_group_statistics(
 
     grouped = {
         str(group_name): group_frame[onset_col].to_numpy(dtype=float)
-        for group_name, group_frame in data.groupby("Group", observed=True)
-    }
+        for group_name, group_frame in data.groupby("Group", observed=True)}
     grouped = {key: values for key, values in grouped.items() if len(values) > 0}
     if len(grouped) < 2:
         return pd.DataFrame(), pd.DataFrame()
@@ -1809,9 +1664,7 @@ def compute_onset_group_statistics(
                 stats.ttest_ind(
                     grouped[group_names[0]],
                     grouped[group_names[1]],
-                    equal_var=bool(levene_p > 0.05) if not np.isnan(levene_p) else True,
-                ).pvalue
-            )
+                    equal_var=bool(levene_p > 0.05) if not np.isnan(levene_p) else True,).pvalue)
             omnibus_test = "ttest_ind"
             pairwise_rows.append(
                 {
@@ -1822,8 +1675,7 @@ def compute_onset_group_statistics(
                     "group1": group_names[0],
                     "group2": group_names[1],
                     "p_value": float(omnibus_p),
-                }
-            )
+                })
         else:
             omnibus_p = float(stats.f_oneway(*grouped.values()).pvalue)
             omnibus_test = "anova"
@@ -1845,8 +1697,7 @@ def compute_onset_group_statistics(
                         "group1": row["group1"],
                         "group2": row["group2"],
                         "p_value": float(row["p_value"]),
-                    }
-                )
+                    })
     else:
         group_names = list(grouped)
         if len(grouped) == 2:
@@ -1867,8 +1718,7 @@ def compute_onset_group_statistics(
                     "group1": group_names[0],
                     "group2": group_names[1],
                     "p_value": float(omnibus_p),
-                }
-            )
+                })
         else:
             omnibus_p = float(stats.kruskal(*grouped.values()).pvalue)
             omnibus_test = "kruskal"
@@ -1881,10 +1731,7 @@ def compute_onset_group_statistics(
                             stats.mannwhitneyu(
                                 grouped[left_group],
                                 grouped[right_group],
-                                alternative="two-sided",
-                            ).pvalue
-                        )
-                    )
+                                alternative="two-sided").pvalue))
                     pairs.append((left_group, right_group))
             adjusted = _fdr_bh_adjust(raw_ps)
             for (left_group, right_group), p_value in zip(pairs, adjusted):
@@ -1897,21 +1744,15 @@ def compute_onset_group_statistics(
                         "group1": left_group,
                         "group2": right_group,
                         "p_value": float(p_value),
-                    }
-                )
+                    })
 
     omnibus = pd.DataFrame(
-        [
-            {
-                "PhaseNumber": phase_number,
-                "Metric": metric_name,
-                "OnsetColumn": onset_col,
-                "test": omnibus_test,
-                "p_value": float(omnibus_p),
-                "group_n": len(grouped),
-            }
-        ]
-    )
+        [{"PhaseNumber": phase_number,
+          "Metric": metric_name,
+          "OnsetColumn": onset_col,
+          "test": omnibus_test,
+          "p_value": float(omnibus_p),
+          "group_n": len(grouped)}])
     return omnibus, pd.DataFrame(pairwise_rows)
 
 def compute_phase_activity_medians(
@@ -1929,9 +1770,7 @@ def compute_phase_activity_medians(
 
     phase_visits = visits.copy()
     phase_visits = phase_visits.loc[phase_visits["AnalysisPhaseNumber"].between(1, 4)].copy()
-    phase_visits["hour_bin_start"] = np.floor(
-        phase_visits["analysis_phase_elapsed_hours"] / float(hourly_bin_size)
-    )
+    phase_visits["hour_bin_start"] = np.floor(phase_visits["analysis_phase_elapsed_hours"] / float(hourly_bin_size))
     phase_visits["hour_bin_start"] = phase_visits["hour_bin_start"] * float(hourly_bin_size)
 
     counts = (
@@ -1940,14 +1779,12 @@ def compute_phase_activity_medians(
             observed=True,
         )["VisitID"]
         .size()
-        .reset_index(name="visits_in_hour")
-    )
+        .reset_index(name="visits_in_hour"))
 
     phase_duration_hours = (
         phase_visits.groupby(["RunGroup", "AnalysisPhaseNumber"], observed=True)["analysis_phase_elapsed_hours"]
         .max()
-        .reset_index(name="phase_max_hour")
-    )
+        .reset_index(name="phase_max_hour"))
     mice = phase_visits.loc[:, ["RunGroup", "AnalysisPhaseNumber", "Group", "ET", "ETLabel"]].drop_duplicates()
     complete_rows: list[pd.DataFrame] = []
     for _, duration_row in phase_duration_hours.iterrows():
@@ -1966,16 +1803,14 @@ def compute_phase_activity_medians(
         counts,
         on=["RunGroup", "AnalysisPhaseNumber", "Group", "ET", "ETLabel", "hour_bin_start"],
         how="left",
-        validate="one_to_one",
-    )
+        validate="one_to_one")
     complete_counts["visits_in_hour"] = complete_counts["visits_in_hour"].fillna(0.0)
 
     mouse_medians = (
         complete_counts.groupby(["Group", "ET", "ETLabel", "AnalysisPhaseNumber"], observed=True)["visits_in_hour"]
         .median()
         .reset_index(name="median_visits_per_hour")
-        .rename(columns={"AnalysisPhaseNumber": "PhaseNumber"})
-    )
+        .rename(columns={"AnalysisPhaseNumber": "PhaseNumber"}))
     return mouse_medians.sort_values(["Group", "PhaseNumber", "ET"]).reset_index(drop=True)
 
 def compute_phase_activity_statistics(mouse_phase_activity: pd.DataFrame) -> pd.DataFrame:
@@ -1991,8 +1826,7 @@ def compute_phase_activity_statistics(mouse_phase_activity: pd.DataFrame) -> pd.
     for group_name, group_data in mouse_phase_activity.groupby("Group", observed=True):
         phase_values = {
             phase_number: group_data.loc[group_data["PhaseNumber"].eq(phase_number), "median_visits_per_hour"].to_numpy()
-            for phase_number in sorted(group_data["PhaseNumber"].unique())
-        }
+            for phase_number in sorted(group_data["PhaseNumber"].unique())}
         valid_arrays = [values for values in phase_values.values() if len(values) > 0]
         anova_p = float(stats.f_oneway(*valid_arrays).pvalue) if len(valid_arrays) >= 2 else np.nan
 
@@ -2011,13 +1845,8 @@ def compute_phase_activity_statistics(mouse_phase_activity: pd.DataFrame) -> pd.
             if phase_number == 1:
                 continue
             comparison = tukey_frame.loc[
-                (
-                    tukey_frame["group1"].eq("1") & tukey_frame["group2"].eq(str(phase_number))
-                )
-                | (
-                    tukey_frame["group1"].eq(str(phase_number)) & tukey_frame["group2"].eq("1")
-                )
-            ]
+                (tukey_frame["group1"].eq("1") & tukey_frame["group2"].eq(str(phase_number)))
+                | (tukey_frame["group1"].eq(str(phase_number)) & tukey_frame["group2"].eq("1"))]
             pairwise_p = float(comparison["p-adj"].iloc[0]) if not comparison.empty else np.nan
             rows.append(
                 {
@@ -2026,7 +1855,6 @@ def compute_phase_activity_statistics(mouse_phase_activity: pd.DataFrame) -> pd.
                     "ReferencePhaseNumber": 1,
                     "anova_p_value": anova_p,
                     "pairwise_p_value_vs_phase1": pairwise_p,
-                }
-            )
+                })
     return pd.DataFrame(rows).sort_values(["Group", "PhaseNumber"]).reset_index(drop=True)
 # %% END
