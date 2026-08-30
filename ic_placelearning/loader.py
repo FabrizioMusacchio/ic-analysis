@@ -8,7 +8,7 @@ DataFrames. It reads:
 3. `Nosepokes.txt` for visit-linked nose-poke events.
 
 The returned visit table contains both the old MATLAB-compatible metric
-(`PlaceError == 0`) and the stricter poster-oriented metric that requires a
+(`PlaceError == 0`) and the stricter analysis-oriented metric that requires a
 correct place visit with at least one associated nose-poke and at least one
 lick.
 
@@ -30,12 +30,7 @@ DEFAULT_PHASE_NAME_MAP: dict[str, int] = {
     "Phase2": 2,
     "Phase3": 3,
     "Phase4": 4}
-PREFERRED_GROUP_ORDER: tuple[str, ...] = (
-    "WT",
-    "tdTomato",
-    "Tau 66-421",
-    "Tau 1-421",
-    "Tau 1-441")
+DEFAULT_GROUP_NAMES: tuple[str, ...] = tuple(f"Group {index}" for index in range(1, 11))
 PHASE_DISPLAY_LABELS: dict[int, str] = {
     1: "Phase1",
     2: "Phase2",
@@ -52,12 +47,45 @@ class CohortData:
     phase_manifest: pd.DataFrame
 
 # %% HELPER FUNCTIONS
-def _ordered_group_categories(groups: pd.Series) -> list[str]:
-    """Return a stable categorical order for pathology groups."""
+def _ordered_raw_group_names(groups: pd.Series) -> list[str]:
+    """Return raw group labels in first-seen order."""
 
-    present = [group for group in PREFERRED_GROUP_ORDER if group in set(groups.dropna())]
-    extras = sorted(set(groups.dropna()) - set(present))
-    return present + extras
+    ordered: list[str] = []
+    for group_name in groups.dropna().astype(str):
+        if group_name not in ordered:
+            ordered.append(group_name)
+    return ordered
+
+def _complete_group_names(group_count: int, group_names: list[str] | tuple[str, ...] | None) -> list[str]:
+    """Fill a user-supplied group-name list with generic defaults."""
+
+    selected: list[str] = []
+    for group_name in group_names or []:
+        display_name = str(group_name)
+        if display_name and display_name not in selected:
+            selected.append(display_name)
+    next_index = len(selected) + 1
+    for default_name in DEFAULT_GROUP_NAMES[len(selected):]:
+        if len(selected) >= group_count:
+            break
+        if default_name not in selected:
+            selected.append(default_name)
+        next_index += 1
+    while len(selected) < group_count:
+        candidate = f"Group {next_index}"
+        if candidate not in selected:
+            selected.append(candidate)
+        next_index += 1
+    return selected[:group_count]
+
+def _resolve_group_name_mapping(
+    groups: pd.Series,
+    group_names: list[str] | tuple[str, ...] | None) -> tuple[dict[str, str], list[str]]:
+    """Map raw dataset group labels to public display labels."""
+
+    raw_groups = _ordered_raw_group_names(groups)
+    display_names = _complete_group_names(len(raw_groups), group_names)
+    return dict(zip(raw_groups, display_names)), display_names
 
 def read_mice_metadata(mice_path: Path, run_group: str) -> pd.DataFrame:
     """Read one `Mice.txt` file and normalize its metadata columns."""
@@ -191,7 +219,7 @@ def attach_analysis_time_columns(
 
     The raw IntelliCage exports store visits in phase-specific files and the
     actual file boundaries can differ by a small amount from the intended
-    protocol timing. For poster-style cross-group comparisons we therefore
+    protocol timing. For cross-group comparisons we therefore
     create a second time axis:
 
     - experimental time starts at the mouse-day onset of day 0
@@ -318,7 +346,7 @@ def load_cohort_data(
     phase_name_map: dict[str, int] | None = None,
     optional_phase_names: set[str] | list[str] | tuple[str, ...] | None = None,
     drop_unmatched_visits: bool = False,
-) -> CohortData:
+    group_names: list[str] | tuple[str, ...] | None = None) -> CohortData:
     """Load and harmonize one IntelliCage cohort directory.
 
     Parameters
@@ -331,6 +359,10 @@ def load_cohort_data(
     optional_phase_names:
         Folder names that may be absent for some run groups without causing
         the loader to fail.
+    group_names:
+        Optional display names for the raw groups found in `Mice.txt`, in
+        first-seen order. Missing entries are filled with generic `Group N`
+        names so partially specified group-name lists remain valid.
     """
 
     dataset_root = Path(dataset_root)
@@ -425,7 +457,9 @@ def load_cohort_data(
         & ~visits["Corner"].eq(visits["CornerPhase3"]))
     visits["phase2_drinking_visit"] = (visits["PhaseNumber"].eq(2) & visits["has_nosepoke"] & visits["visit_has_lick"])
 
-    group_categories = _ordered_group_categories(visits["Group"])
+    group_name_mapping, group_categories = _resolve_group_name_mapping(metadata["Group"], group_names)
+    visits["Group"] = visits["Group"].astype(str).map(group_name_mapping).fillna(visits["Group"].astype(str))
+    metadata["Group"] = metadata["Group"].astype(str).map(group_name_mapping).fillna(metadata["Group"].astype(str))
     visits["Group"] = pd.Categorical(visits["Group"], categories=group_categories, ordered=True)
     metadata["Group"] = pd.Categorical(metadata["Group"], categories=group_categories, ordered=True)
 

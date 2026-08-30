@@ -48,7 +48,9 @@ from pathlib import Path
 
 from ic_placelearning.loader import load_cohort_data
 
-cohort = load_cohort_data(Path("example_data/synthetic_group_ab_place_learning"))
+cohort = load_cohort_data(
+    Path("example_data/synthetic_group_ab_place_learning"),
+    group_names=["Group A", "Group B"])
 print(cohort.visits.head())
 ```
 

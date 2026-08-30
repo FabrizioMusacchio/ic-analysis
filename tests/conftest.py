@@ -32,7 +32,9 @@ def synthetic_dataset_root(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 @pytest.fixture(scope="session")
 def synthetic_cohort(synthetic_dataset_root: Path):
-    return load_cohort_data(synthetic_dataset_root)
+    return load_cohort_data(
+        synthetic_dataset_root,
+        group_names=["Group A", "Group B"])
 
 @pytest.fixture(scope="session")
 def aligned_visits(synthetic_cohort):

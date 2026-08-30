@@ -1814,11 +1814,11 @@ def compute_phase_activity_medians(
     return mouse_medians.sort_values(["Group", "PhaseNumber", "ET"]).reset_index(drop=True)
 
 def compute_phase_activity_statistics(mouse_phase_activity: pd.DataFrame) -> pd.DataFrame:
-    """Compute legacy-style phase activity statistics per pathology group.
+    """Compute legacy-style phase activity statistics per experimental group.
 
     The old exported CSV files contain an omnibus one-way ANOVA plus pairwise
     phase comparisons. This function reproduces that logic using one-way ANOVA
-    across phases 1-4 within a pathology group and Tukey HSD for the pairwise
+    across phases 1-4 within an experimental group and Tukey HSD for the pairwise
     post-hoc tests.
     """
 

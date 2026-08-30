@@ -101,7 +101,9 @@ def main() -> None:
     set_figure_size_presets(USER_FIGSIZE_CM)
 
     output_root = prepare_output_root(USER_DATASET_ROOT, USER_RESULTS_SUBDIR)
-    cohort = load_cohort_data(USER_DATASET_ROOT)
+    cohort = load_cohort_data(
+        USER_DATASET_ROOT,
+        group_names=list(USER_GROUP_RENAMES.values()))
     visits = attach_analysis_time_columns(
         cohort.visits,
         cohort.phase_manifest,

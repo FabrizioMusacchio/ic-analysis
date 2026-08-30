@@ -32,11 +32,16 @@ import numpy as np
 import pandas as pd
 # %% CONSTANTS
 GROUP_COLORS = {
-    "WT": "#264653",
-    "tdTomato": "#6c757d",
-    "Tau 66-421": "#2a9d8f",
-    "Tau 1-421": "#e9a820",
-    "Tau 1-441": "#4ade80"}
+    "Group 1": "#264653",
+    "Group 2": "#6c757d",
+    "Group 3": "#2a9d8f",
+    "Group 4": "#e9a820",
+    "Group 5": "#4ade80",
+    "Group 6": "#457b9d",
+    "Group 7": "#c7523f",
+    "Group 8": "#8a5cf6",
+    "Group 9": "#2f9e44",
+    "Group 10": "#8d6e63"}
 PHASE_COLORS = {
     1: "#bfe4f7",
     2: "#6fb2e5",
@@ -73,7 +78,7 @@ ACTIVITY_FIGSIZE_CM = DEFAULT_FIGURE_SIZE_CM["ACTIVITY_FIGSIZE_CM"]
 WIDE_GROUP_FIGSIZE_CM = DEFAULT_FIGURE_SIZE_CM["WIDE_GROUP_FIGSIZE_CM"]
 # %% FUNCTIONS
 def set_group_colors(color_mapping: dict[str, str] | None) -> None:
-    """Update the global pathology-group color mapping used across all plots."""
+    """Update the global experimental-group color mapping used across all plots."""
 
     if not color_mapping:
         return
@@ -92,7 +97,7 @@ def set_figure_size_presets(size_mapping: dict[str, tuple[float, float]] | None)
         globals_dict[key] = (float(width_cm), float(height_cm))
 
 def configure_plot_style(*, font_size: float = 10.0, font_family: str = "Arial") -> None:
-    """Apply global matplotlib defaults for IntelliCage poster figures."""
+    """Apply global matplotlib defaults for IntelliCage publication figures."""
 
     mpl.rcParams["font.family"] = "sans-serif"
     mpl.rcParams["font.sans-serif"] = [font_family, "Arial", "Helvetica", "DejaVu Sans"]
@@ -147,12 +152,12 @@ def _count_axis_upper(y_max: float) -> float:
     return max(5.0, float(y_max) * 1.35 + 0.5)
 
 def _group_color(group_name: str) -> str:
-    """Return a stable display color for one pathology group."""
+    """Return a stable display color for one experimental group."""
 
     return GROUP_COLORS.get(group_name, "#457b9d")
 
 def _ordered_group_names_from_series(series: pd.Series) -> list[str]:
-    """Return pathology groups in categorical order when available."""
+    """Return experimental groups in categorical order when available."""
 
     categories = getattr(series.dtype, "categories", None)
     if categories is not None:
@@ -642,7 +647,7 @@ def plot_experiment_overview(
     awake_start_clock_hour: float = 6.0,
     awake_end_clock_hour: float = 18.0,
 ) -> None:
-    """Plot full-experiment visit activity for one pathology group."""
+    """Plot full-experiment visit activity for one experimental group."""
 
     group_mouse = mouse_bins.loc[mouse_bins["Group"].astype(str).eq(group_name)].copy()
     group_summary = summary_bins.loc[summary_bins["Group"].astype(str).eq(group_name)].copy()
@@ -719,7 +724,7 @@ def plot_experiment_overview_groups(
     awake_start_clock_hour: float = 6.0,
     awake_end_clock_hour: float = 18.0,
 ) -> None:
-    """Plot all pathology-group visit means across the full experiment."""
+    """Plot all experimental-group visit means across the full experiment."""
 
     if summary_bins.empty:
         return
@@ -1147,7 +1152,7 @@ def plot_phase_learning_rate_groups(
     awake_end_clock_hour: float = 18.0,
     starting_day: int = 1,
 ) -> None:
-    """Plot one selected place-learning rate metric across all pathology groups."""
+    """Plot one selected place-learning rate metric across all experimental groups."""
 
     if summary_bins.empty:
         return
@@ -1219,7 +1224,7 @@ def plot_phase_learning_counts_groups(
     awake_end_clock_hour: float = 18.0,
     starting_day: int = 1,
 ) -> None:
-    """Plot all pathology-group correct-visit counts in one figure."""
+    """Plot all experimental-group correct-visit counts in one figure."""
 
     if summary_bins.empty:
         return
@@ -1744,7 +1749,7 @@ def plot_cumulative_role_curves(
     onset_points: list[dict[str, float | str]] | None = None,
     starting_day: int = 1,
 ) -> None:
-    """Plot cumulative role-based corner trajectories for one pathology group."""
+    """Plot cumulative role-based corner trajectories for one experimental group."""
 
     group_summary = summary_bins.loc[summary_bins["Group"].astype(str).eq(group_name)].copy()
     if group_summary.empty:
@@ -1981,7 +1986,7 @@ def plot_phase_activity_boxplot(
     phase_display_names: dict[int, str],
     output_path: Path,
 ) -> None:
-    """Plot median hourly activity per phase and pathology group."""
+    """Plot median hourly activity per phase and experimental group."""
 
     if mouse_phase_activity.empty:
         return

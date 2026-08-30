@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+import shutil
 
 import pandas as pd
 import pytest
 
+from additional_scripts.generate_synthetic_group_ab_data import write_dataset
 from ic_placelearning.loader import attach_analysis_time_columns
 from ic_placelearning.loader import load_cohort_data
 from ic_placelearning.loader import read_mice_metadata
@@ -29,6 +31,55 @@ def test_load_synthetic_dataset_preserves_group_difference(synthetic_cohort) -> 
     phase3 = synthetic_cohort.visits.loc[synthetic_cohort.visits["PhaseNumber"].eq(3)]
     rates = phase3.groupby("Group", observed=True)["rewarded_correct_corner_visit"].mean()
     assert rates["Group A"] > rates["Group B"] + 0.15
+
+def test_load_cohort_data_uses_generic_group_names_by_default(synthetic_dataset_root: Path) -> None:
+    cohort = load_cohort_data(synthetic_dataset_root)
+    assert list(cohort.metadata["Group"].cat.categories) == ["Group 1", "Group 2"]
+    assert set(cohort.visits["Group"].astype(str)) == {"Group 1", "Group 2"}
+
+def test_load_cohort_data_fills_partially_supplied_group_names(tmp_path: Path) -> None:
+    left_root = tmp_path / "left"
+    right_root = tmp_path / "right"
+    combined_root = tmp_path / "combined"
+    write_dataset(
+        left_root,
+        mouse_count_per_group=1,
+        random_seed=1,
+        overwrite=False)
+    write_dataset(
+        right_root,
+        mouse_count_per_group=1,
+        random_seed=2,
+        overwrite=False)
+    combined_root.mkdir()
+    shutil.copytree(left_root / "GruppeA", combined_root / "GruppeA")
+    shutil.copytree(left_root / "GruppeB", combined_root / "GruppeB")
+    shutil.copytree(right_root / "GruppeA", combined_root / "GruppeC")
+    shutil.copytree(right_root / "GruppeB", combined_root / "GruppeD")
+    for index, run_group in enumerate(["GruppeA", "GruppeB", "GruppeC", "GruppeD"]):
+        mice_path = combined_root / run_group / "Mice.txt"
+        mice = pd.read_csv(mice_path, sep="\t")
+        mice["VIRUS"] = f"Raw {index + 1}"
+        mice["RFID"] = mice["RFID"] + index * 10000
+        mice.to_csv(mice_path, sep="\t", index=False)
+        for visits_path in (combined_root / run_group).glob("Phase*/IntelliCage/Visits.txt"):
+            visits = pd.read_csv(visits_path, sep="\t")
+            visits["AnimalTag"] = visits["AnimalTag"] + index * 10000
+            visits.to_csv(visits_path, sep="\t", index=False)
+
+    cohort = load_cohort_data(
+        combined_root,
+        group_names=["Control", "Control", "Treatment"])
+    assert list(cohort.metadata["Group"].cat.categories) == [
+        "Control",
+        "Treatment",
+        "Group 3",
+        "Group 4"]
+    assert set(cohort.visits["Group"].astype(str)) == {
+        "Control",
+        "Treatment",
+        "Group 3",
+        "Group 4"}
 
 def test_attach_analysis_time_columns_assigns_protocol_windows(synthetic_cohort) -> None:
     visits = attach_analysis_time_columns(
