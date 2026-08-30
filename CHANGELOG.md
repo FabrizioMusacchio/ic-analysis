@@ -9,6 +9,15 @@ purposes.
 
 ---
 
+## 🚀 IntelliCage Place Learning Toolkit v0.0.1
+
+August 30, 2026
+
+### 🗄️ Archiving
+- Archived the public `ic_placelearning` package on Zenodo for long-term preservation and citation.
+
+---
+
 ## 🚀 IntelliCage Place Learning Toolkit v0.0.0
 
 August 30, 2026
