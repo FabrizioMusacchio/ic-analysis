@@ -11,7 +11,7 @@ authors:
 
 repository-code: https://github.com/FabrizioMusacchio/ic-placelearning
 license: GPL-3.0-or-later
-abstract: "A Python toolkit for analyzing place learning experiments conducted in IntelliCage."
+abstract: "A Python toolkit for analyzing place learning experiments conducted in the IntelliCage."
 
 keywords:
   - IntelliCage

@@ -1,13 +1,13 @@
 # IntelliCage Place Learning Toolkit
 
-A Python toolkit for analyzing place learning experiments conducted in IntelliCage.
+A Python toolkit for analyzing place learning experiments conducted in the *IntelliCage*.
 
-The package provides reusable tools to load IntelliCage text exports, merge mouse metadata with visit and nose-poke records, compute place-learning and reversal-learning metrics, and create publication-oriented summary plots.
+The package provides reusable tools to load *IntelliCage* results exports, merge mouse metadata with visit and nose-poke records, compute place-learning and reversal-learning metrics, and create publication-oriented summary plots.
 
 This public repository uses synthetic example data only. Real experimental cohort data are intentionally not included.
 
 ## Experiment protocol
-The default place-learning workflow follows a four-phase IntelliCage protocol
+The default place-learning workflow follows a four-phase *IntelliCage* protocol
 on an aligned 0-266 h analysis timeline:
 
 ![IntelliCage place-learning protocol](figures/intellicage_place_learning_protocol.jpg)
@@ -37,7 +37,7 @@ pip install -e ".[dev]"
 ## Package structure
 The import package is `ic_placelearning`:
 
-- `ic_placelearning.loader` Reads IntelliCage-style `Mice.txt`, `Visits.txt`, and `Nosepokes.txt` files, merges metadata, and adds experiment-relative timing and event annotations.
+- `ic_placelearning.loader` Reads *IntelliCage*-style `Mice.txt`, `Visits.txt`, and `Nosepokes.txt` files, merges metadata, and adds experiment-relative timing and event annotations.
 - `ic_placelearning.metrics` Computes activity, place-learning, reversal-learning, responder, onset, and group-comparison summary tables.
 - `ic_placelearning.plotting` Creates group-level and mouse-level figures from the computed metric tables.
 
@@ -55,7 +55,7 @@ print(cohort.visits.head())
 ```
 
 ## Synthetic example data
-The repository includes a small synthetic IntelliCage-style dataset at:
+The repository includes a small synthetic *IntelliCage*-style dataset at:
 
 ```text
 example_data/synthetic_group_ab_place_learning
@@ -66,7 +66,7 @@ It contains two groups with ten pseudo-mice each:
 - `Group A`: simulated stronger place learning and better reversal adaptation.
 - `Group B`: simulated weaker place learning and stronger phase-4 perseveration at the previous correct corner.
 
-The dataset follows the same folder layout expected from real IntelliCage
+The dataset follows the same folder layout expected from real *IntelliCage*
 exports:
 
 ```text
@@ -122,9 +122,9 @@ For phase 4, the toolkit also separates:
 - visits to the neutral incorrect corners
 
 ## Time alignment
-The analysis distinguishes raw IntelliCage phase files from an aligned analysis timeline:
+The analysis distinguishes raw *IntelliCage* phase files from an aligned analysis timeline:
 
-- phase files preserve the observed IntelliCage export structure
+- phase files preserve the observed *IntelliCage* export structure
 - analysis windows can follow a protocol schedule in elapsed hours
 - mouse-day and awake/sleep windows can be configured for plotting and daily summaries
 
@@ -134,16 +134,16 @@ common experiment timeline.
 
 
 ## Where to start
-We recommend to start with usage examples on the documentation website. The folder `user_scripts/` contains interactive scripts that are described in the documentation and can be run cell by cell in VS Code's interactive window or in a notebook-like environment. They are designed to be run with provided example datasets (download from [Zenodo](https://doi.org/10.5281/zenodo.XXXXX)) or with your own IntelliCage data.
+We recommend to start with usage examples on the documentation website. The folder `user_scripts/` contains interactive scripts that are described in the documentation and can be run cell by cell in VS Code's interactive window or in a notebook-like environment. They are designed to be run with provided example datasets (download from [Zenodo](https://doi.org/10.5281/zenodo.XXXXX)) or with your own *IntelliCage* data.
 
 ## Citation
 If you use the *IntelliCage Place Learning Toolkit* in scientific work, please cite the preprint:
 
-> Musacchio, F. and Fuhrmann, M. (2026). *IntelliCage Place Learning Toolkit: A Python toolkit for analyzing place learning experiments conducted in IntelliCage.*. Zenodo. https://doi.org/10.5281/zenodo.XXXXXX
+> Musacchio, F. and Fuhrmann, M. (2026). *IntelliCage Place Learning Toolkit: A Python toolkit for analyzing place learning experiments conducted in the IntelliCage.*. Zenodo. https://doi.org/10.5281/zenodo.XXXXXX
 
 <!-- Please also cite the archived IntelliCage Place Learning Toolkit software version used in your analysis:
 
-> Musacchio, F. (2026). *IntelliCage Place Learning Toolkit: A Python package for analyzing place learning experiments in IntelliCage*. Zenodo. https://doi.org/10.5281/zenodo.20787509
+> Musacchio, F. (2026). *IntelliCage Place Learning Toolkit: A Python package for analyzing place learning experiments in the IntelliCage*. Zenodo. https://doi.org/10.5281/zenodo.20787509
 
 Zenodo software archive:
 [https://doi.org/10.5281/zenodo.20787509](https://doi.org/10.5281/zenodo.20787509) -->

@@ -9,69 +9,42 @@ purposes.
 
 ---
 
-## IntelliCage Place Learning Toolkit v0.0.0
+## 🚀 IntelliCage Place Learning Toolkit v0.0.0
 
 August 30, 2026
 
-This is the first public release of the IntelliCage Place Learning Toolkit: a
-Python toolkit for analyzing place learning experiments conducted in
-IntelliCage. The release establishes the public package structure, synthetic
-example dataset, documentation entry points, and automated tests for the core
-loader, metric, and plotting workflow.
+This is the first public release of the *IntelliCage Place Learning Toolkit*, a Python toolkit for analyzing place learning experiments conducted in the *IntelliCage*. The release establishes the public package structure, synthetic example dataset, documentation entry points, and automated tests for the core loader, metric, and plotting workflow.
 
-### Features
+### ✨ Features
 
-- Added the public `ic_placelearning` Python package with loader, metric, and
-  plotting modules.
-- Added IntelliCage export loading for cohort folders containing `Mice.txt`,
-  `Visits.txt`, and `Nosepokes.txt` files across protocol phases.
-- Added metadata harmonization for mouse group, sex, RFID, experiment label,
-  date of birth, and assigned phase-3/phase-4 corners.
-- Added aligned analysis-time columns for protocol-level phase windows,
-  experiment elapsed time, phase elapsed time, mouse days, and awake/sleep
-  summaries.
-- Added place-learning metrics for correct-corner visits, correct-corner
-  nose-poke visits, rewarded correct-corner visits, and MATLAB-compatible
-  `PlaceError == 0` scoring.
-- Added phase-4 reversal metrics separating visits to the new correct corner,
-  previous correct corner, and neutral incorrect corners.
-- Added binned activity, learning-rate, learning-count, responder, onset,
-  phase-activity, cumulative-corner-role, and group-comparison summary
-  functions.
-- Added plotting helpers for experiment overviews, phase-wise learning curves,
-  reversal components, day-wise violins, onset distributions, cumulative role
-  curves, and phase-activity summaries.
+- Added the public `ic_placelearning` Python package with loader, metric, and plotting modules.
+- Added IntelliCage export loading for cohort folders containing `Mice.txt`, `Visits.txt`, and `Nosepokes.txt` files across protocol phases.
+- Added metadata harmonization for mouse group, sex, RFID, experiment label, date of birth, and assigned phase-3/phase-4 corners.
+- Added aligned analysis-time columns for protocol-level phase windows, experiment elapsed time, phase elapsed time, mouse days, and awake/sleep summaries.
+- Added place-learning metrics for correct-corner visits, correct-corner nose-poke visits, rewarded correct-corner visits, and MATLAB-compatible `PlaceError == 0` scoring.
+- Added phase-4 reversal metrics separating visits to the new correct corner, previous correct corner, and neutral incorrect corners.
+- Added binned activity, learning-rate, learning-count, responder, onset, phase-activity, cumulative-corner-role, and group-comparison summary functions.
+- Added plotting helpers for experiment overviews, phase-wise learning curves, reversal components, day-wise violins, onset distributions, cumulative role curves, and phase-activity summaries.
 
-### Example Data
+### 🗂 Example Data
 
-- Added a synthetic Group A/B IntelliCage-style dataset with 20 pseudo-mice and
-  four protocol phases.
+- Added a synthetic Group A/B IntelliCage-style dataset with 20 pseudo-mice and four protocol phases.
 - Added a reproducible synthetic data generator in `additional_scripts/`.
 - Added a public synthetic-data analysis script in `user_scripts/`.
-- Added generated protocol schematic assets in `figures/` for README and
-  documentation use.
+- Added generated protocol schematic assets in `figures/` for README and documentation use.
 
-### Documentation
+### 📚 Documentation
 
-- Added public README documentation focused on installation, package structure,
-  synthetic example data, demo analysis, metric definitions, time alignment,
-  testing, and citation.
-- Added an IntelliCage place-learning protocol schematic for the four-phase
-  workflow: Free Hab, NPA, PL, and PR.
+- Added public README documentation focused on installation, package structure, synthetic example data, demo analysis, metric definitions, time alignment, testing, and citation.
+- Added an IntelliCage place-learning protocol schematic for the four-phase workflow: Free Hab, NPA, PL, and PR.
 - Added `CITATION.cff` metadata for citation-aware repositories.
-- Added contribution guidelines tailored to IntelliCage place-learning analysis
-  and synthetic-data-based testing.
+- Added contribution guidelines tailored to IntelliCage place-learning analysis and synthetic-data-based testing.
 
-### Tests and Packaging
+### 🧪 Tests and packaging
 
-- Added `pyproject.toml` for editable installs and future PyPI packaging under
-  the distribution name `ic-placelearning`.
-- Added development dependencies for testing and documentation via
-  `pip install -e ".[dev]"`.
-- Added automated tests for loader behavior, aligned timing, core metrics,
-  statistical summaries, plotting smoke tests, synthetic data generation, and
-  the public demo script.
-- Established a test coverage threshold of 75% for the public
-  `ic_placelearning` package.
+- Added `pyproject.toml` for editable installs and future PyPI packaging under the distribution name `ic-placelearning`.
+- Added development dependencies for testing and documentation via `pip install -e ".[dev]"`.
+- Added automated tests for loader behavior, aligned timing, core metrics, statistical summaries, plotting smoke tests, synthetic data generation, and the public demo script.
+- Established a test coverage threshold of 75% for the public `ic_placelearning` package.
 
 ---
