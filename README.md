@@ -137,9 +137,9 @@ common experiment timeline.
 We recommend to start with usage examples on the documentation website. The folder `user_scripts/` contains interactive scripts that are described in the documentation and can be run cell by cell in VS Code's interactive window or in a notebook-like environment. They are designed to be run with provided example datasets (download from [Zenodo](https://doi.org/10.5281/zenodo.22181525)) or with your own *IntelliCage* data.
 
 ## Citation
-If you use the *IntelliCage Place Learning Toolkit* in scientific work, please cite the preprint:
+If you use the *IntelliCage Place Learning Toolkit* in scientific work, please cite it as follows:
 
-> Musacchio, F. and Fuhrmann, M. (2026). *IntelliCage Place Learning Toolkit: A Python toolkit for analyzing place learning experiments conducted in the IntelliCage.*. Zenodo. https://doi.org/10.5281/zenodo.22181525
+> Musacchio, F. (2026). *IntelliCage Place Learning Toolkit: A Python toolkit for analyzing place learning experiments conducted in the IntelliCage.*. Zenodo. https://doi.org/10.5281/zenodo.22181525
 
 <!-- Please also cite the archived IntelliCage Place Learning Toolkit software version used in your analysis:
 
