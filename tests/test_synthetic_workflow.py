@@ -14,8 +14,8 @@ def test_generator_writes_intellicage_export_shape(tmp_path: Path) -> None:
         mouse_count_per_group=3,
         random_seed=11,
         overwrite=False)
-    assert (dataset_root / "GruppeA" / "Mice.txt").exists()
-    assert (dataset_root / "GruppeB" / "Phase4" / "IntelliCage" / "Visits.txt").exists()
+    assert (dataset_root / "GroupA" / "Mice.txt").exists()
+    assert (dataset_root / "GroupB" / "Phase4" / "IntelliCage" / "Visits.txt").exists()
 
     manifest = pd.read_csv(dataset_root / "synthetic_dataset_manifest.tsv", sep="\t")
     assert manifest["MouseCount"].unique().tolist() == [3]

@@ -3,9 +3,9 @@
 The generated files mimic the subset of IntelliCage text exports consumed by
 the current Python pipeline:
 
-- `Gruppe*/Mice.txt`
-- `Gruppe*/Phase*/IntelliCage/Visits.txt`
-- `Gruppe*/Phase*/IntelliCage/Nosepokes.txt`
+- `Group*/Mice.txt`
+- `Group*/Phase*/IntelliCage/Visits.txt`
+- `Group*/Phase*/IntelliCage/Nosepokes.txt`
 
 The data are intentionally pseudo-data. They are useful for documentation,
 tests, and demos, but they are not derived from real mice.
@@ -16,6 +16,7 @@ from __future__ import annotations
 from argparse import ArgumentParser
 from dataclasses import dataclass
 from pathlib import Path
+import shutil
 import sys
 
 import numpy as np
@@ -410,13 +411,15 @@ def write_dataset(
     if output_root.exists() and any(output_root.iterdir()) and not overwrite:
         raise FileExistsError(
             f"{output_root} already exists and is not empty. Re-run with --overwrite to replace files.")
+    if output_root.exists() and overwrite:
+        shutil.rmtree(output_root)
     output_root.mkdir(parents=True, exist_ok=True)
 
     rng = np.random.default_rng(random_seed)
     experiment_start = pd.Timestamp("2026-01-05 06:00:00")
     profiles = [
         GroupProfile(
-            run_group="GruppeA",
+            run_group="GroupA",
             group_name="Group A",
             rfid_start=910200000001000,
             visit_rate_scale=1.08,
@@ -429,7 +432,7 @@ def write_dataset(
             phase4_old_corner_tau_hours=14.0,
             reward_probability=0.92),
         GroupProfile(
-            run_group="GruppeB",
+            run_group="GroupB",
             group_name="Group B",
             rfid_start=910200000002000,
             visit_rate_scale=0.82,

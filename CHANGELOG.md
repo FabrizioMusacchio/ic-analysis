@@ -9,6 +9,13 @@ purposes.
 
 ---
 
+## 🔜 IntelliCage Place Learning Toolkit v0.0.3 UPCOMING RELEASE
+
+### 🧩 Changes
+* renamed the synthetic-data groups to "GroupA" and "GroupB" to avoid confusion
+
+---
+
 ## 🚀 IntelliCage Place Learning Toolkit v0.0.2
 
 August 31, 2026

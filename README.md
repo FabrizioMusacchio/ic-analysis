@@ -78,12 +78,12 @@ The dataset follows the same folder layout expected from real *IntelliCage*
 exports:
 
 ```text
-GruppeA/
+GroupA/
   Mice.txt
   Phase1/IntelliCage/Visits.txt
   Phase1/IntelliCage/Nosepokes.txt
   ...
-GruppeB/
+GroupB/
   Mice.txt
   Phase1/IntelliCage/Visits.txt
   Phase1/IntelliCage/Nosepokes.txt

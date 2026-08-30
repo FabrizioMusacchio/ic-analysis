@@ -371,9 +371,9 @@ def load_cohort_data(
         selected_phase_map = {str(key): int(value) for key, value in phase_name_map.items()}
     optional_phase_name_set = {str(name) for name in (optional_phase_names or set())}
     run_group_dirs = sorted(
-        path for path in dataset_root.iterdir() if path.is_dir() and path.name.startswith("Gruppe"))
+        path for path in dataset_root.iterdir() if path.is_dir() and (path / "Mice.txt").exists())
     if not run_group_dirs:
-        raise FileNotFoundError(f"No run-group directories found below {dataset_root}")
+        raise FileNotFoundError(f"No run-group directories with `Mice.txt` found below {dataset_root}")
 
     metadata_frames: list[pd.DataFrame] = []
     visit_frames: list[pd.DataFrame] = []

@@ -52,11 +52,11 @@ def test_load_cohort_data_fills_partially_supplied_group_names(tmp_path: Path) -
         random_seed=2,
         overwrite=False)
     combined_root.mkdir()
-    shutil.copytree(left_root / "GruppeA", combined_root / "GruppeA")
-    shutil.copytree(left_root / "GruppeB", combined_root / "GruppeB")
-    shutil.copytree(right_root / "GruppeA", combined_root / "GruppeC")
-    shutil.copytree(right_root / "GruppeB", combined_root / "GruppeD")
-    for index, run_group in enumerate(["GruppeA", "GruppeB", "GruppeC", "GruppeD"]):
+    shutil.copytree(left_root / "GroupA", combined_root / "GroupA")
+    shutil.copytree(left_root / "GroupB", combined_root / "GroupB")
+    shutil.copytree(right_root / "GroupA", combined_root / "GroupC")
+    shutil.copytree(right_root / "GroupB", combined_root / "GroupD")
+    for index, run_group in enumerate(["GroupA", "GroupB", "GroupC", "GroupD"]):
         mice_path = combined_root / run_group / "Mice.txt"
         mice = pd.read_csv(mice_path, sep="\t")
         mice["VIRUS"] = f"Raw {index + 1}"
@@ -106,7 +106,7 @@ def test_read_mice_metadata_accepts_legacy_corner_columns(tmp_path: Path) -> Non
                 "VIRUS": "Group A",
                 "Corner Phase 1": 2,
                 "Corner Phase 2": 4}]).to_csv(mice_path, sep="\t", index=False)
-    metadata = read_mice_metadata(mice_path, "GruppeA")
+    metadata = read_mice_metadata(mice_path, "GroupA")
     assert metadata.loc[0, "ETLabel"] == "ET1"
     assert int(metadata.loc[0, "CornerPhase3"]) == 2
     assert int(metadata.loc[0, "CornerPhase4"]) == 4
@@ -115,7 +115,7 @@ def test_summarize_nosepokes_by_visit_handles_licks() -> None:
     nosepokes = pd.DataFrame(
         [
             {
-                "RunGroup": "GruppeA",
+                "RunGroup": "GroupA",
                 "Phase": "Phase3",
                 "PhaseNumber": 3,
                 "VisitID": 1,
@@ -124,7 +124,7 @@ def test_summarize_nosepokes_by_visit_handles_licks() -> None:
                 "LickDuration": 0.5,
                 "ConditionError": 0},
             {
-                "RunGroup": "GruppeA",
+                "RunGroup": "GroupA",
                 "Phase": "Phase3",
                 "PhaseNumber": 3,
                 "VisitID": 1,
