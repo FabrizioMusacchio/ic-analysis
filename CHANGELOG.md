@@ -7,9 +7,17 @@ See here for a detailed list of changes made in each release of the
 Each release can be archived on Zenodo for long-term preservation and citation
 purposes.
 
+<!-- ---
+
+## 🔜 IntelliCage Place Learning Toolkit v0.0.4 UPCOMING RELEASE -->
+
 ---
 
-## 🔜 IntelliCage Place Learning Toolkit v0.0.3 UPCOMING RELEASE
+## 🚀 IntelliCage Place Learning Toolkit v0.0.3
+
+August 31, 2026
+
+Just a minor release to rename the synthetic-data groups to avoid naming confusion.
 
 ### 🧩 Changes
 * renamed the synthetic-data groups to "GroupA" and "GroupB" to avoid confusion
