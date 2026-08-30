@@ -1,9 +1,14 @@
-Data IntelliCage/*
-private/*
-Matlab scripts/*
-__pycache__*
-results*
-archived/*
 .gitignore
 .vscode/settings.json
-.gitignore
+__pycache__*
+
+archived/*
+private/*
+
+
+results*
+
+user_scripts_private/*
+Data IntelliCage/*
+Matlab scripts/*
+
