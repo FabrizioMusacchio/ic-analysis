@@ -257,7 +257,7 @@ We recommend to start with usage examples on the documentation website. The fold
 ## Citation
 If you use the *IntelliCage Analysis Toolkit* in scientific work, please cite it as follows:
 
-> Musacchio, F. (2026). *IntelliCage Analysis Toolkit: A Python toolkit for analyzing IntelliCage experiments, including place learning and reversal workflows.*. Zenodo. https://doi.org/10.5281/zenodo.22181525
+> Musacchio, F. (2026). *IntelliCage Analysis Toolkit: A Python toolkit for standardizing the analysis of IntelliCage experiments.*. Zenodo. https://doi.org/10.5281/zenodo.22181525
 
 <!-- Please also cite the archived IntelliCage Analysis Toolkit software version used in your analysis:
 

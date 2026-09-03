@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "ic-analysis"
 version = "0.1.0"
-description = "A Python toolkit for analyzing IntelliCage experiments, including place learning, reversal, and bottle-preference workflows."
+description = "A Python toolkit for standardizing the analysis of IntelliCage experiments."
 readme = "README.md"
 requires-python = ">=3.12"
 license = "GPL-3.0-or-later"
