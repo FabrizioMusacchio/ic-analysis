@@ -3,9 +3,9 @@ requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ic-placelearning"
-version = "0.0.4"
-description = "A Python toolkit for analyzing place learning experiments conducted in the IntelliCage."
+name = "ic-analysis"
+version = "0.1.0"
+description = "A Python toolkit for analyzing IntelliCage experiments, including place learning, reversal, and bottle-preference workflows."
 readme = "README.md"
 requires-python = ">=3.12"
 license = "GPL-3.0-or-later"
@@ -14,6 +14,7 @@ authors = [
   { name = "Fabrizio Musacchio" }]
 keywords = [
   "IntelliCage",
+  "behavior analysis",
   "place learning",
   "behavioral neuroscience",
   "mouse behavior",
@@ -30,6 +31,7 @@ dependencies = [
   "matplotlib",
   "numpy",
   "pandas",
+  "pyyaml",
   "scipy",
   "statsmodels"]
 
@@ -44,24 +46,32 @@ dev = [
   "sphinx-copybutton"]
 
 [project.urls]
-Homepage = "https://github.com/FabrizioMusacchio/ic-placelearning"
-Repository = "https://github.com/FabrizioMusacchio/ic-placelearning"
-Issues = "https://github.com/FabrizioMusacchio/ic-placelearning/issues"
-Changelog = "https://github.com/FabrizioMusacchio/ic-placelearning/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/FabrizioMusacchio/ic-analysis"
+Repository = "https://github.com/FabrizioMusacchio/ic-analysis"
+Issues = "https://github.com/FabrizioMusacchio/ic-analysis/issues"
+Changelog = "https://github.com/FabrizioMusacchio/ic-analysis/blob/main/CHANGELOG.md"
 
 [tool.setuptools.packages.find]
-include = ["ic_placelearning*"]
+include = ["ic_analysis*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = [
-  "--cov=ic_placelearning",
+  "--cov=ic_analysis",
   "--cov-report=term-missing",
   "--cov-fail-under=75"]
+filterwarnings = [
+  "ignore:scipy.stats.shapiro:UserWarning",
+  "ignore:invalid value encountered in divide:RuntimeWarning",
+  "ignore:divide by zero encountered in divide:RuntimeWarning",
+  "ignore:Precision loss occurred in moment calculation.*:RuntimeWarning",
+  "ignore:The behavior of wald_test will change after 0.14.*:FutureWarning"]
 
 [tool.coverage.run]
 branch = true
-source = ["ic_placelearning"]
+source = ["ic_analysis"]
+omit = [
+  "ic_analysis/workflows/*"]
 
 [tool.coverage.report]
 show_missing = true
