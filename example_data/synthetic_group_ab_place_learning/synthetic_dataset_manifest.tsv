@@ -1,9 +1,9 @@
-RunGroup	Group	Phase	MouseCount	VisitCount	NosepokeCount	StartHour	DurationHours
-GroupA	Group A	Phase1	10	265	145	0.0	74.0
-GroupA	Group A	Phase2	10	285	227	74.0	48.0
-GroupA	Group A	Phase3	10	458	364	122.0	72.0
-GroupA	Group A	Phase4	10	378	275	194.0	72.0
-GroupB	Group B	Phase1	10	242	157	0.0	74.0
-GroupB	Group B	Phase2	10	176	143	74.0	48.0
-GroupB	Group B	Phase3	10	364	194	122.0	72.0
-GroupB	Group B	Phase4	10	302	168	194.0	72.0
+RunGroup	Group	Phase	MouseCount	VisitCount	NosepokeCount	StartHour	RunGroupStartOffsetHours	ObservedPhaseStart	ObservedPhaseEnd	DurationHours
+GroupA	Group A	Phase1	10	5375	3166	0.0	0.0	2026-01-05 06:00:00.000	2026-01-08 08:00:00.000	74.0
+GroupA	Group A	Phase2	10	3719	2878	74.0	0.0	2026-01-08 08:00:00.000	2026-01-10 08:00:00.000	48.0
+GroupA	Group A	Phase3	10	6319	5102	122.0	0.0	2026-01-10 08:00:00.000	2026-01-13 08:00:00.000	72.0
+GroupA	Group A	Phase4	10	5458	4069	194.0	0.0	2026-01-13 08:00:00.000	2026-01-16 08:00:00.000	72.0
+GroupB	Group B	Phase1	10	5074	2948	0.0	7.5	2026-01-05 13:30:00.000	2026-01-08 15:30:00.000	74.0
+GroupB	Group B	Phase2	10	3629	2829	74.0	7.5	2026-01-08 15:30:00.000	2026-01-10 15:30:00.000	48.0
+GroupB	Group B	Phase3	10	5467	2992	122.0	7.5	2026-01-10 15:30:00.000	2026-01-13 15:30:00.000	72.0
+GroupB	Group B	Phase4	10	5271	2733	194.0	7.5	2026-01-13 15:30:00.000	2026-01-16 15:30:00.000	72.0
