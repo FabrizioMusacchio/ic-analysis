@@ -3,8 +3,10 @@
 The package provides reusable utilities to read IntelliCage exports, define
 script-level experiment and subject metadata, compute behavior metrics, and
 create publication-oriented plots.
-"""
 
+author: Fabrizio Musacchio
+date: May/August 2026
+"""
 from __future__ import annotations
 
 from pathlib import Path

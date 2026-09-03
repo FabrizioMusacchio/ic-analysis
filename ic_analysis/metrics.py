@@ -5,7 +5,7 @@ trajectories, correct-visit rates, phase-wise activity summaries, and helper
 metadata such as robust common phase-duration recommendations.
 
 author: Fabrizio Musacchio
-date: May 2026
+date: May/August 2026
 """
 # %% IMPORTS
 from __future__ import annotations

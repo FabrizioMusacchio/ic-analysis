@@ -1,8 +1,11 @@
-"""Run full place-learning and reversal workflows for IntelliCage data.
+"""Place-learning and reversal workflows for IntelliCage data.
 
 The functions in this module orchestrate the reusable metric and plotting
 helpers into a complete PL/PR analysis workflow. User scripts should usually
 access these functions through the generic ``ic_analysis.experiment`` facade.
+
+author: Fabrizio Musacchio
+date: May/August 2026
 """
 # %% IMPORTS
 from __future__ import annotations
@@ -283,7 +286,6 @@ def phase_origin_clock_hour(mouse_day_start_hour: float, scheduled_phase_start_h
     """Return the wall-clock hour that corresponds to phase-relative time zero."""
 
     return float((mouse_day_start_hour + (scheduled_phase_start_hour % 24.0)) % 24.0)
-
 
 def experiment_day_from_scheduled_start(scheduled_phase_start_hour: float) -> int:
     """Convert one scheduled phase-start hour to its global experiment-day number."""

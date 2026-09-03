@@ -1,4 +1,10 @@
-"""Object-oriented experiment containers for IntelliCage analyses."""
+"""
+This is the object-oriented experiment containers for all
+IntelliCage analyses.
+
+author: Fabrizio Musacchio
+date: May/August 2026
+"""
 # %% IMPORTS
 from __future__ import annotations
 
@@ -18,7 +24,6 @@ from .plotting import (
     plot_bottle_preference_groups,
     set_group_colors)
 from .workflows import place_learning_reversal as plr
-
 # %% TYPES
 SpreadMetric = Literal["sem", "std"]
 PhaseSelection = Literal["all"] | int | tuple[int, ...] | list[int]

@@ -5,6 +5,9 @@ analysis layer. Raw IntelliCage exports provide event tables; experiment and
 subject definitions describe which phases exist, which animals should be
 included, and how groups, time windows, and task-specific assignments should be
 interpreted.
+
+author: Fabrizio Musacchio
+date: May/August 2026
 """
 # %% IMPORTS
 from __future__ import annotations
@@ -19,7 +22,6 @@ import pandas as pd
 # %% TYPE ALIASES
 DateLike = str | datetime | pd.Timestamp
 PhaseWindow = tuple[DateLike, DateLike]
-
 # %% HELPERS
 def _parse_datetime(value: DateLike) -> pd.Timestamp:
     """Parse a user-supplied date/time value."""

@@ -10,7 +10,7 @@ implementation. The main design choices are:
 - awake/sleep background shading
 
 author: Fabrizio Musacchio
-date: May 2026
+date: May/August 2026
 """
 # %% IMPORTS
 from __future__ import annotations

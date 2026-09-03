@@ -10,7 +10,7 @@ Subject metadata are expected from the user-defined `SUBJECTS` input and are
 matched to raw `AnimalTag` values from `Visits.txt`.
 
 author: Fabrizio Musacchio
-date: May 2026
+date: May/August 2026
 """
 # %% IMPORTS
 from __future__ import annotations

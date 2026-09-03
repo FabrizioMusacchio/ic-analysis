@@ -1,4 +1,8 @@
-"""Subject-template helpers for user-defined IntelliCage analyses."""
+"""Subject-template helpers for user-defined IntelliCage analyses.
+
+author: Fabrizio Musacchio
+date: May/August 2026
+"""
 # %% IMPORTS
 from __future__ import annotations
 
@@ -9,7 +13,6 @@ import pandas as pd
 import yaml
 
 from .metadata import ExperimentMetadata, PhaseMetadata
-
 # %% HELPERS
 def create_subjects_yaml_template(
     *,
