@@ -1,9 +1,8 @@
-"""Generate a synthetic IntelliCage place-learning example dataset.
+"""Generate a synthetic IntelliCage PL/PR example dataset.
 
 The generated files mimic the subset of IntelliCage text exports consumed by
 the current Python pipeline:
 
-- `Group*/Mice.txt`
 - `Group*/Phase*/IntelliCage/Visits.txt`
 - `Group*/Phase*/IntelliCage/Nosepokes.txt`
 
@@ -69,6 +68,7 @@ NOSEPOKE_COLUMNS = [
     "Start",
     "End",
     "Side",
+    "Bottle",
     "SideCondition",
     "SideError",
     "TimeError",
@@ -87,6 +87,11 @@ CORNER_TO_SIDE = {
     2: 3,
     3: 5,
     4: 7}
+CORNER_TO_RIGHT_SIDE = {
+    1: 2,
+    2: 4,
+    3: 6,
+    4: 8}
 
 # %% DATA CLASSES
 @dataclass(frozen=True)
@@ -95,6 +100,7 @@ class GroupProfile:
 
     run_group: str
     group_name: str
+    start_offset_hours: float
     rfid_start: int
     visit_rate_scale: float
     phase2_lick_probability: float
@@ -105,6 +111,7 @@ class GroupProfile:
     phase4_old_corner_floor: float
     phase4_old_corner_tau_hours: float
     reward_probability: float
+    saccharin_preference_probability: float
 
 # %% SYNTHETIC BEHAVIOR FUNCTIONS
 def logistic_learning_probability(
@@ -253,12 +260,12 @@ def format_timestamp(timestamp: pd.Timestamp) -> str:
 
     return timestamp.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
 
-def build_mice_table(
+def build_subject_table(
     profile: GroupProfile,
     *,
     mouse_count: int,
     rng: np.random.Generator) -> pd.DataFrame:
-    """Create one synthetic `Mice.txt` table."""
+    """Create one internal synthetic subject table."""
 
     rows: list[dict[str, object]] = []
     for mouse_index in range(mouse_count):
@@ -276,7 +283,7 @@ def build_mice_table(
     return pd.DataFrame(rows)
 
 def build_phase_tables(
-    mice: pd.DataFrame,
+    subjects: pd.DataFrame,
     profile: GroupProfile,
     *,
     phase_number: int,
@@ -287,18 +294,19 @@ def build_phase_tables(
     phase_name = PHASE_NAMES[phase_number]
     phase_start_hours = PHASE_START_HOURS[phase_number]
     phase_duration_hours = PHASE_DURATIONS_HOURS[phase_number]
-    phase_start = experiment_start + pd.to_timedelta(phase_start_hours, unit="h")
-    phase_start_clock_hour = (experiment_start.hour + phase_start_hours) % 24.0
+    group_experiment_start = experiment_start + pd.to_timedelta(profile.start_offset_hours, unit="h")
+    phase_start = group_experiment_start + pd.to_timedelta(phase_start_hours, unit="h")
+    phase_start_clock_hour = (group_experiment_start.hour + group_experiment_start.minute / 60.0 + phase_start_hours) % 24.0
     base_rates = {
-        1: 0.38,
-        2: 0.48,
-        3: 0.58,
-        4: 0.54}
+        1: 6.5,
+        2: 7.0,
+        3: 7.8,
+        4: 7.4}
     visit_rows: list[dict[str, object]] = []
     nosepoke_rows: list[dict[str, object]] = []
     visit_id = 0
 
-    for _, mouse in mice.iterrows():
+    for _, mouse in subjects.iterrows():
         mouse_shift = float(rng.normal(0.0, 0.055))
         rate = base_rates[phase_number] * profile.visit_rate_scale * float(rng.lognormal(0.0, 0.12))
         target_visit_count = int(rng.poisson(rate * phase_duration_hours))
@@ -362,6 +370,9 @@ def build_phase_tables(
                     "LickDuration": lick_duration})
 
             if has_nosepoke:
+                chooses_saccharin = rng.random() <= profile.saccharin_preference_probability
+                bottle_side = CORNER_TO_RIGHT_SIDE[corner] if chooses_saccharin else CORNER_TO_SIDE[corner]
+                bottle_label = "saccharin" if chooses_saccharin else "plain water"
                 nosepoke_start = start + pd.to_timedelta(float(rng.uniform(0.05, 0.6)), unit="s")
                 nosepoke_duration_seconds = float(np.clip(rng.gamma(shape=1.6, scale=1.2), 0.2, duration_seconds))
                 nosepoke_end = nosepoke_start + pd.to_timedelta(nosepoke_duration_seconds, unit="s")
@@ -372,7 +383,8 @@ def build_phase_tables(
                         "VisitID": visit_id,
                         "Start": format_timestamp(nosepoke_start),
                         "End": format_timestamp(nosepoke_end),
-                        "Side": CORNER_TO_SIDE[corner],
+                        "Side": bottle_side,
+                        "Bottle": bottle_label,
                         "SideCondition": side_condition,
                         "SideError": side_error,
                         "TimeError": 0,
@@ -421,6 +433,7 @@ def write_dataset(
         GroupProfile(
             run_group="GroupA",
             group_name="Group A",
+            start_offset_hours=0.0,
             rfid_start=910200000001000,
             visit_rate_scale=1.08,
             phase2_lick_probability=0.78,
@@ -430,12 +443,14 @@ def write_dataset(
             phase4_tau_hours=18.0,
             phase4_old_corner_floor=0.04,
             phase4_old_corner_tau_hours=14.0,
-            reward_probability=0.92),
+            reward_probability=0.92,
+            saccharin_preference_probability=0.82),
         GroupProfile(
             run_group="GroupB",
             group_name="Group B",
+            start_offset_hours=7.5,
             rfid_start=910200000002000,
-            visit_rate_scale=0.82,
+            visit_rate_scale=0.98,
             phase2_lick_probability=0.48,
             phase3_asymptote=0.56,
             phase3_tau_hours=34.0,
@@ -443,19 +458,19 @@ def write_dataset(
             phase4_tau_hours=46.0,
             phase4_old_corner_floor=0.22,
             phase4_old_corner_tau_hours=52.0,
-            reward_probability=0.72)]
+            reward_probability=0.72,
+            saccharin_preference_probability=0.24)]
 
     manifest_rows: list[dict[str, object]] = []
     for profile in profiles:
-        mice = build_mice_table(
+        subjects = build_subject_table(
             profile,
             mouse_count=mouse_count_per_group,
             rng=rng)
         run_root = output_root / profile.run_group
-        write_table(mice, run_root / "Mice.txt")
         for phase_number in sorted(PHASE_NAMES):
             visits, nosepokes = build_phase_tables(
-                mice,
+                subjects,
                 profile,
                 phase_number=phase_number,
                 experiment_start=experiment_start,
@@ -472,15 +487,24 @@ def write_dataset(
                     "VisitCount": len(visits),
                     "NosepokeCount": len(nosepokes),
                     "StartHour": PHASE_START_HOURS[phase_number],
+                    "RunGroupStartOffsetHours": profile.start_offset_hours,
+                    "ObservedPhaseStart": format_timestamp(experiment_start + pd.to_timedelta(profile.start_offset_hours + PHASE_START_HOURS[phase_number], unit="h")),
+                    "ObservedPhaseEnd": format_timestamp(experiment_start + pd.to_timedelta(profile.start_offset_hours + PHASE_START_HOURS[phase_number] + PHASE_DURATIONS_HOURS[phase_number], unit="h")),
                     "DurationHours": PHASE_DURATIONS_HOURS[phase_number]})
 
     manifest = pd.DataFrame(manifest_rows)
     write_table(manifest, output_root / "synthetic_dataset_manifest.tsv")
     (output_root / "README.md").write_text(
-        "# Synthetic IntelliCage Place Learning Dataset\n\n"
+        "# Synthetic IntelliCage PL/PR Dataset\n\n"
         "Pseudo-data generated for documentation and demo analyses. Group A is "
         "simulated as a stronger learner, while Group B shows flatter learning "
-        "and stronger phase-4 perseveration at the previous correct corner.\n",
+        "and stronger phase-4 perseveration at the previous correct corner. "
+        "Group A also shows a clear saccharin preference, while Group B favors "
+        "plain water to mimic an anhedonia-like bottle-preference phenotype.\n\n"
+        "The two run-group folders intentionally have different real start "
+        "times. Group A starts at 2026-01-05 06:00, while Group B starts 7.5 h "
+        "later at 2026-01-05 13:30. This demonstrates why phase time windows "
+        "are declared per subject in analysis scripts or subject YAML files.\n",
         encoding="utf-8")
 
 def parse_args(argv: list[str] | None = None) -> ArgumentParser:
@@ -509,7 +533,7 @@ def parse_args(argv: list[str] | None = None) -> ArgumentParser:
     return parser
 
 def main(argv: list[str] | None = None) -> None:
-    """CLI entry point."""
+    """Script entry point."""
 
     parser = parse_args(argv)
     args = parser.parse_args(argv)
