@@ -244,7 +244,7 @@ This makes runs with different start times, uninterrupted long exports, and
 interrupted recordings comparable on a common experiment timeline.
 
 ## Which experiments are already supported?
-The toolkit is designed to be extensible to any *IntelliCage* experiment. The current release support the analysis of the following experiments:
+The toolkit is designed to be extensible to any *IntelliCage* experiment. The current release already supports the analysis of the following experiments:
 
 * General activity and locomotor cage engagement
 * Liquid-intake surveillance / drinking behavior
