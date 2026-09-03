@@ -136,7 +136,7 @@ subjects = ic.load_subjects_yaml(dataset_root / "subjects.yaml")
 ```
 
 ## Synthetic example data
-The repository includes a small synthetic *IntelliCage*-style dataset at:
+The repository includes a small synthetic place learning *IntelliCage*-style dataset at:
 
 ```text
 example_data/synthetic_group_ab_place_learning
@@ -147,7 +147,7 @@ It contains two groups with ten pseudo-mice each:
 - `Group A`: simulated stronger place learning, better reversal adaptation, and clear saccharin preference.
 - `Group B`: simulated weaker place learning, stronger phase-4 perseveration at the previous correct corner, and a plain-water preference as an anhedonia-like phenotype.
 
-It follows a four-phase *IntelliCage* protocol on an aligned 0-266 h analysis timeline:
+It follows a four-phase *IntelliCage* place learning and place reversal protocol on an aligned 0-266 h analysis timeline:
 
 ![IntelliCage place-learning protocol](figures/intellicage_place_learning_protocol.jpg)
 
@@ -243,7 +243,16 @@ The analysis distinguishes raw *IntelliCage* export blocks from biological analy
 This makes runs with different start times, uninterrupted long exports, and
 interrupted recordings comparable on a common experiment timeline.
 
+## Which experiments are already supported?
+The toolkit is designed to be extensible to any *IntelliCage* experiment. The current release support the analysis of the following experiments:
 
+* General activity and locomotor cage engagement
+* Liquid-intake surveillance / drinking behavior
+* Nosepoke adaptation
+* Bottle preference / two-bottle choice
+* Place learning
+* Place learning and place reversal
+* General readouts from any phase-wise structured experiment
 
 ## Where to start
 We recommend to start with usage examples on the documentation website (will come soon). The folder `user_scripts/` contains interactive scripts that are described in the documentation and can be run cell by cell in VS Code's interactive window or in a notebook-like environment. They are designed to be run with provided example datasets (download from [Zenodo](https://doi.org/10.5281/zenodo.22181525) or from this repository, here stored in `example_data/`) or with your own *IntelliCage* data.
