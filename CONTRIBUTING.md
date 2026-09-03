@@ -1,19 +1,21 @@
 # How to Contribute
 
-Thank you for your interest in contributing to the IntelliCage Place Learning
+Thank you for your interest in contributing to the IntelliCage Analysis
 Toolkit. This project welcomes improvements to the code, documentation, tests,
 synthetic example data, and analysis workflows.
 
 The goal of the toolkit is to provide a robust, transparent, and reproducible
-Python interface for analyzing place learning experiments conducted in
-IntelliCage.
+Python interface for analyzing IntelliCage experiments. Place learning and
+reversal are the first supported workflows; future modules can add other
+IntelliCage paradigms on top of the same metadata, loading, metrics, and
+plotting foundation.
 
 ## Before You Start
 
 Please check the GitHub issue tracker to see whether your idea, bug report, or
 enhancement has already been discussed:
 
-[https://github.com/FabrizioMusacchio/ic-placelearning/issues](https://github.com/FabrizioMusacchio/ic-placelearning/issues)
+[https://github.com/FabrizioMusacchio/ic-analysis/issues](https://github.com/FabrizioMusacchio/ic-analysis/issues)
 
 For small fixes such as typos or minor documentation improvements, opening a
 pull request directly is fine.
@@ -21,7 +23,7 @@ pull request directly is fine.
 For larger changes, please open or comment on an issue with:
 
 - what you would like to change or add
-- why it is useful for IntelliCage place-learning analysis
+- why it is useful for IntelliCage analysis
 - expected input data structure and output behavior
 - edge cases, assumptions, or testing ideas
 
@@ -30,11 +32,11 @@ For larger changes, please open or comment on an issue with:
 The package requires Python 3.12 or newer.
 
 ```bash
-git clone https://github.com/FabrizioMusacchio/ic-placelearning.git
-cd ic-placelearning
+git clone https://github.com/FabrizioMusacchio/ic-analysis.git
+cd ic-analysis
 
-conda create -n ic_placelearning python=3.12 -y
-conda activate ic_placelearning
+conda create -n ic_analysis python=3.12 -y
+conda activate ic_analysis
 
 pip install -e ".[dev]"
 ```
@@ -74,6 +76,7 @@ Changes to metric definitions should be explicit, documented, and tested. In
 particular, please be careful with:
 
 - phase-number and phase-name mapping
+- experiment-level and subject-level metadata validation
 - assigned-corner logic for phase 3 and phase 4
 - rewarded correct-corner definitions
 - awake/sleep and mouse-day alignment
