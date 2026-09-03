@@ -6,24 +6,10 @@
 [![Example Datasets on Zenodo](https://img.shields.io/badge/Example%20Datasets-10.5281%2Fzenodo.21603005-blue)](https://doi.org/10.5281/zenodo.21603005) 
 [![Read the docs](https://badgen.net/badge/rtd/Documentation)](https://ic-analysis.readthedocs.io)-->
 
-A Python toolkit for analyzing *IntelliCage* experiments, including place learning, reversal, and bottle-preference workflows.
+A Python toolkit for standardizing the analysis of *IntelliCage* experiments.
 
-The package provides reusable tools to load *IntelliCage* text exports, define experiment and subject metadata directly in Python, merge those metadata with visit and nose-poke records, compute behavioral metrics, and create publication-oriented summary plots. Raw export folders are treated as technical export blocks; biological analysis phases are defined by subject-specific time windows.
+The package provides reusable tools to load *IntelliCage* text exports, define experiment and subject metadata directly in Python, merge those metadata with visit and nose-poke records, compute behavioral metrics, and create publication-oriented summary plots. Raw export folders are treated as technical export blocks; biological analysis phases are defined by subject-specific time windows, ensuring standardized analysis across experiments.
 
-This public repository uses synthetic example data only. Real experimental cohort data are intentionally not included.
-
-## Example PLR protocol
-The public place-learning/reversal example follows a four-phase *IntelliCage* protocol
-on an aligned 0-266 h analysis timeline:
-
-![IntelliCage place-learning protocol](figures/intellicage_place_learning_protocol.jpg)
-
-- Phase 1, Free Hab: 0-74 h, free habituation and exploration of all corners. This may vary from 48-74 h depending on the experiment design.
-- Phase 2, NPA: 74-122 h, nose-poke adaptation and licking behavior.
-- Phase 3, PL: 122-194 h, place learning with an assigned rewarded correct
-  corner.
-- Phase 4, PR: 194-266 h, place reversal with a new rewarded corner and
-  tracking of visits to the previous correct corner.
 
 ## Installation
 The toolkit requires Python 3.12 or newer.
@@ -161,6 +147,17 @@ It contains two groups with ten pseudo-mice each:
 - `Group A`: simulated stronger place learning, better reversal adaptation, and clear saccharin preference.
 - `Group B`: simulated weaker place learning, stronger phase-4 perseveration at the previous correct corner, and a plain-water preference as an anhedonia-like phenotype.
 
+It follows a four-phase *IntelliCage* protocol on an aligned 0-266 h analysis timeline:
+
+![IntelliCage place-learning protocol](figures/intellicage_place_learning_protocol.jpg)
+
+- Phase 1, Free Hab: 0-74 h, free habituation and exploration of all corners. This may vary from 48-74 h depending on the experiment design.
+- Phase 2, NPA: 74-122 h, nose-poke adaptation and licking behavior.
+- Phase 3, PL: 122-194 h, place learning with an assigned rewarded correct
+  corner.
+- Phase 4, PR: 194-266 h, place reversal with a new rewarded corner and
+  tracking of visits to the previous correct corner.
+
 The run-group folders intentionally start at different real clock times: Group
 A begins on 2026-01-05 at 06:00, while Group B begins 7.5 h later at 13:30.
 This demonstrates why real phase `time_window` values are stored per subject.
@@ -217,7 +214,6 @@ The script writes compact result tables and figures to:
 example_data/synthetic_group_ab_place_learning/results
 ```
 
-Generated result folders are ignored by Git. They can be safely recreated from the synthetic input data and analysis script.
 
 ## Metric definitions
 The workflow keeps several place-learning metrics in parallel:
@@ -230,10 +226,8 @@ The workflow keeps several place-learning metrics in parallel:
   Correct-corner visits with nose-poke and licking divided by all visits.
 - `bottle_preference`  
   Left/right nose-poke-side licking summarized as raw bottle consumption or as a bounded preference fraction, e.g. `right_bottle / (left_bottle + right_bottle)`.
-- `matlab_placeerror_only`  
-  Legacy-compatible definition based on `PlaceError == 0`.
 
-For phase 4, the toolkit also separates:
+For a place reversal phase in a place learning experiment, the toolkit also separates:
 
 - visits to the new correct corner
 - visits to the previous correct corner
@@ -252,7 +246,7 @@ interrupted recordings comparable on a common experiment timeline.
 
 
 ## Where to start
-We recommend to start with usage examples on the documentation website. The folder `user_scripts/` contains interactive scripts that are described in the documentation and can be run cell by cell in VS Code's interactive window or in a notebook-like environment. They are designed to be run with provided example datasets (download from [Zenodo](https://doi.org/10.5281/zenodo.22181525)) or with your own *IntelliCage* data.
+We recommend to start with usage examples on the documentation website (will come soon). The folder `user_scripts/` contains interactive scripts that are described in the documentation and can be run cell by cell in VS Code's interactive window or in a notebook-like environment. They are designed to be run with provided example datasets (download from [Zenodo](https://doi.org/10.5281/zenodo.22181525) or from this repository, here stored in `example_data/`) or with your own *IntelliCage* data.
 
 ## Citation
 If you use the *IntelliCage Analysis Toolkit* in scientific work, please cite it as follows:
