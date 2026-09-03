@@ -6,7 +6,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 
-from ic_placelearning.metrics import (
+from ic_analysis.metrics import (
     build_analysis_phase_window_table,
     compute_awake_day_rate_tables,
     compute_experiment_drinking_visit_bins,
@@ -25,7 +25,7 @@ from ic_placelearning.metrics import (
     compute_time_window_learning_curves,
     compute_visit_window_learning_curves,
     flag_iqr_outliers)
-from ic_placelearning.plotting import (
+from ic_analysis.plotting import (
     configure_plot_style,
     plot_cumulative_role_curves,
     plot_experiment_dual_metric_bars,

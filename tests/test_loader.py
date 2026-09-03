@@ -7,10 +7,10 @@ import pandas as pd
 import pytest
 
 from additional_scripts.generate_synthetic_group_ab_data import write_dataset
-from ic_placelearning.loader import attach_analysis_time_columns
-from ic_placelearning.loader import load_cohort_data
-from ic_placelearning.loader import read_mice_metadata
-from ic_placelearning.loader import summarize_nosepokes_by_visit
+from ic_analysis.loader import attach_analysis_time_columns
+from ic_analysis.loader import load_cohort_data
+from ic_analysis.loader import summarize_nosepokes_by_visit
+from tests.conftest import synthetic_subject_metadata
 
 SCHEDULED_PHASE_START_HOURS = {
     1: 0.0,
@@ -33,9 +33,15 @@ def test_load_synthetic_dataset_preserves_group_difference(synthetic_cohort) -> 
     assert rates["Group A"] > rates["Group B"] + 0.15
 
 def test_load_cohort_data_uses_generic_group_names_by_default(synthetic_dataset_root: Path) -> None:
-    cohort = load_cohort_data(synthetic_dataset_root)
+    cohort = load_cohort_data(
+        synthetic_dataset_root,
+        subject_metadata=synthetic_subject_metadata(synthetic_dataset_root))
     assert list(cohort.metadata["Group"].cat.categories) == ["Group 1", "Group 2"]
     assert set(cohort.visits["Group"].astype(str)) == {"Group 1", "Group 2"}
+
+def test_load_cohort_data_requires_subject_metadata(synthetic_dataset_root: Path) -> None:
+    with pytest.raises(ValueError, match="subject_metadata"):
+        load_cohort_data(synthetic_dataset_root)
 
 def test_load_cohort_data_fills_partially_supplied_group_names(tmp_path: Path) -> None:
     left_root = tmp_path / "left"
@@ -57,19 +63,22 @@ def test_load_cohort_data_fills_partially_supplied_group_names(tmp_path: Path) -
     shutil.copytree(right_root / "GroupA", combined_root / "GroupC")
     shutil.copytree(right_root / "GroupB", combined_root / "GroupD")
     for index, run_group in enumerate(["GroupA", "GroupB", "GroupC", "GroupD"]):
-        mice_path = combined_root / run_group / "Mice.txt"
-        mice = pd.read_csv(mice_path, sep="\t")
-        mice["VIRUS"] = f"Raw {index + 1}"
-        mice["RFID"] = mice["RFID"] + index * 10000
-        mice.to_csv(mice_path, sep="\t", index=False)
         for visits_path in (combined_root / run_group).glob("Phase*/IntelliCage/Visits.txt"):
             visits = pd.read_csv(visits_path, sep="\t")
             visits["AnimalTag"] = visits["AnimalTag"] + index * 10000
             visits.to_csv(visits_path, sep="\t", index=False)
+    subject_metadata = synthetic_subject_metadata(combined_root)
+    group_order = {
+        "GroupA": "Raw 1",
+        "GroupB": "Raw 2",
+        "GroupC": "Raw 3",
+        "GroupD": "Raw 4"}
+    subject_metadata["Group"] = subject_metadata["DetectedRunGroup"].map(group_order)
 
     cohort = load_cohort_data(
         combined_root,
-        group_names=["Control", "Control", "Treatment"])
+        group_names=["Control", "Control", "Treatment"],
+        subject_metadata=subject_metadata)
     assert list(cohort.metadata["Group"].cat.categories) == [
         "Control",
         "Treatment",
@@ -80,6 +89,48 @@ def test_load_cohort_data_fills_partially_supplied_group_names(tmp_path: Path) -
         "Treatment",
         "Group 3",
         "Group 4"}
+
+def test_load_cohort_data_reads_single_export_block_with_subject_phase_windows(tmp_path: Path) -> None:
+    source_root = tmp_path / "source"
+    flat_root = tmp_path / "flat"
+    write_dataset(
+        source_root,
+        mouse_count_per_group=1,
+        random_seed=11,
+        overwrite=False)
+    subject_metadata = synthetic_subject_metadata(source_root)
+    for run_group_dir in sorted(path for path in source_root.iterdir() if path.is_dir()):
+        export_dir = flat_root / run_group_dir.name / "Export_Block_1" / "IntelliCage"
+        export_dir.mkdir(parents=True)
+        visits_frames = []
+        nosepoke_frames = []
+        visit_offset = 0
+        for phase_dir in sorted(run_group_dir.glob("Phase*")):
+            visits = pd.read_csv(phase_dir / "IntelliCage" / "Visits.txt", sep="\t")
+            nosepokes = pd.read_csv(phase_dir / "IntelliCage" / "Nosepokes.txt", sep="\t")
+            visits["VisitID"] = visits["VisitID"] + visit_offset
+            nosepokes["VisitID"] = nosepokes["VisitID"] + visit_offset
+            visit_offset = int(visits["VisitID"].max()) + 1
+            visits_frames.append(visits)
+            nosepoke_frames.append(nosepokes)
+        pd.concat(visits_frames, ignore_index=True).to_csv(export_dir / "Visits.txt", sep="\t", index=False)
+        pd.concat(nosepoke_frames, ignore_index=True).to_csv(export_dir / "Nosepokes.txt", sep="\t", index=False)
+
+    cohort = load_cohort_data(
+        flat_root,
+        group_names=["Group A", "Group B"],
+        subject_metadata=subject_metadata)
+    aligned = attach_analysis_time_columns(
+        cohort.visits,
+        cohort.phase_manifest,
+        scheduled_phase_start_hours=SCHEDULED_PHASE_START_HOURS,
+        mouse_day_start_hour=6.0,
+        schedule_anchor_phase_number=2)
+
+    assert set(cohort.phase_manifest["PhaseNumber"]) == {1}
+    assert set(cohort.phase_manifest["Phase"]) == {"Export_Block_1"}
+    assert set(aligned["AnalysisPhaseNumber"].dropna().astype(int)) == {1, 2, 3, 4}
+    assert aligned.loc[aligned["AnalysisPhaseNumber"].eq(3), "AnalysisAssignedCorner"].notna().all()
 
 def test_attach_analysis_time_columns_assigns_protocol_windows(synthetic_cohort) -> None:
     visits = attach_analysis_time_columns(
@@ -93,23 +144,6 @@ def test_attach_analysis_time_columns_assigns_protocol_windows(synthetic_cohort)
     phase4 = visits.loc[visits["AnalysisPhaseNumber"].eq(4)]
     assert phase4["previous_correct_corner_visit"].any()
     assert phase4["neutral_incorrect_corner_visit"].any()
-
-def test_read_mice_metadata_accepts_legacy_corner_columns(tmp_path: Path) -> None:
-    mice_path = tmp_path / "Mice.txt"
-    pd.DataFrame(
-        [
-            {
-                "RFID": 123,
-                "SEX": "male",
-                "DOB": "01.01.26",
-                "ET": "1",
-                "VIRUS": "Group A",
-                "Corner Phase 1": 2,
-                "Corner Phase 2": 4}]).to_csv(mice_path, sep="\t", index=False)
-    metadata = read_mice_metadata(mice_path, "GroupA")
-    assert metadata.loc[0, "ETLabel"] == "ET1"
-    assert int(metadata.loc[0, "CornerPhase3"]) == 2
-    assert int(metadata.loc[0, "CornerPhase4"]) == 4
 
 def test_summarize_nosepokes_by_visit_handles_licks() -> None:
     nosepokes = pd.DataFrame(
@@ -138,5 +172,7 @@ def test_summarize_nosepokes_by_visit_handles_licks() -> None:
     assert bool(summary.loc[0, "has_nosepoke_lick"])
 
 def test_load_cohort_data_reports_missing_run_group(tmp_path: Path) -> None:
-    with pytest.raises(FileNotFoundError, match="No run-group directories"):
-        load_cohort_data(tmp_path)
+    with pytest.raises(FileNotFoundError, match="No cage-run directories"):
+        load_cohort_data(
+            tmp_path,
+            subject_metadata=pd.DataFrame({"AnimalID": ["1"]}))
