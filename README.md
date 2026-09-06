@@ -13,6 +13,8 @@ The package provides reusable tools to load *IntelliCage* text exports, define e
 
 ![Example outputs from the IntelliCage Analysis Toolkit](figures/ic_analysis_toolkit_example.jpg)
 
+A full documentation website is available at [https://ic-analysis.readthedocs.io](https://ic-analysis.readthedocs.io).
+
 ## Installation
 The toolkit requires Python 3.12 or newer.
 
