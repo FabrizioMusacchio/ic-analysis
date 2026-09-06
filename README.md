@@ -1,15 +1,20 @@
 # IntelliCage Analysis Toolkit
 
-![GitHub Release](https://img.shields.io/github/v/release/FabrizioMusacchio/ic-analysis) [![PyPI version](https://img.shields.io/pypi/v/ic-analysis.svg)](https://pypi.org/project/ic-analysis/) [![GPLv3 License](https://img.shields.io/badge/License-GPL%20v3-green.svg)](https://github.com/FabrizioMusacchio/ic-analysis?tab=GPL-3.0-1-ov-file) ![Tests](https://github.com/FabrizioMusacchio/ic-analysis/actions/workflows/ic_analysis_tests.yml/badge.svg) [![GitHub last commit](https://img.shields.io/github/last-commit/FabrizioMusacchio/ic-analysis)](https://github.com/FabrizioMusacchio/ic-analysis/commits/main/)  [![codecov](https://img.shields.io/codecov/c/github/FabrizioMusacchio/ic-analysis?logo=codecov)](https://codecov.io/gh/fabriziomusacchio/ic-analysis)  [![GitHub Issues Open](https://img.shields.io/github/issues/FabrizioMusacchio/ic-analysis)](https://github.com/FabrizioMusacchio/ic-analysis/issues) [![GitHub Issues Closed](https://img.shields.io/github/issues-closed/FabrizioMusacchio/ic-analysis?color=53c92e)](https://github.com/FabrizioMusacchio/ic-analysis/issues?q=is%3Aissue%20state%3Aclosed) [![GitHub Issues or Pull Requests](https://img.shields.io/github/issues-pr/FabrizioMusacchio/ic-analysis)](https://github.com/FabrizioMusacchio/ic-analysis/pulls)   ![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/fabriziomusacchio/ic-analysis) [![PyPI - Downloads](https://img.shields.io/pypi/dm/ic-analysis?logo=pypy&label=PiPY%20downloads&color=blue)](https://pypistats.org/packages/ic-analysis) [![PyPI Total Downloads](https://static.pepy.tech/personalized-badge/ic-analysis?period=total&units=INTERNATIONAL_SYSTEM&left_color=GRAY&right_color=BLUE&left_text=PiPY+total+downloads)](https://pepy.tech/projects/ic-analysis)   [![Zenodo Archive](https://img.shields.io/badge/Zenodo%20Archive-10.5281%2Fzenodo.22181525-blue)](https://doi.org/10.5281/zenodo.22181525)  
+![GitHub Release](https://img.shields.io/github/v/release/FabrizioMusacchio/ic-analysis) [![PyPI version](https://img.shields.io/pypi/v/ic-analysis.svg)](https://pypi.org/project/ic-analysis/) [![GPLv3 License](https://img.shields.io/badge/License-GPL%20v3-green.svg)](https://github.com/FabrizioMusacchio/ic-analysis?tab=GPL-3.0-1-ov-file) ![Tests](https://github.com/FabrizioMusacchio/ic-analysis/actions/workflows/ic_analysis_tests.yml/badge.svg) [![GitHub last commit](https://img.shields.io/github/last-commit/FabrizioMusacchio/ic-analysis)](https://github.com/FabrizioMusacchio/ic-analysis/commits/main/)  [![codecov](https://img.shields.io/codecov/c/github/FabrizioMusacchio/ic-analysis?logo=codecov)](https://codecov.io/gh/fabriziomusacchio/ic-analysis)  [![GitHub Issues Open](https://img.shields.io/github/issues/FabrizioMusacchio/ic-analysis)](https://github.com/FabrizioMusacchio/ic-analysis/issues) [![GitHub Issues Closed](https://img.shields.io/github/issues-closed/FabrizioMusacchio/ic-analysis?color=53c92e)](https://github.com/FabrizioMusacchio/ic-analysis/issues?q=is%3Aissue%20state%3Aclosed) [![GitHub Issues or Pull Requests](https://img.shields.io/github/issues-pr/FabrizioMusacchio/ic-analysis)](https://github.com/FabrizioMusacchio/ic-analysis/pulls)   ![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/fabriziomusacchio/ic-analysis) [![PyPI - Downloads](https://img.shields.io/pypi/dm/ic-analysis?logo=pypy&label=PiPY%20downloads&color=blue)](https://pypistats.org/packages/ic-analysis) [![PyPI Total Downloads](https://static.pepy.tech/personalized-badge/ic-analysis?period=total&units=INTERNATIONAL_SYSTEM&left_color=GRAY&right_color=BLUE&left_text=PiPY+total+downloads)](https://pepy.tech/projects/ic-analysis)  [![Example Datasets on Zenodo](https://img.shields.io/badge/Example%20Datasets-10.5281%2Fzenodo.22518261-blue)](https://doi.org/10.5281/zenodo.22518261)   [![Zenodo Archive](https://img.shields.io/badge/Zenodo%20Archive-10.5281%2Fzenodo.22181525-blue)](https://doi.org/10.5281/zenodo.22181525)  
 
 <!-- [![Documentation Status](https://readthedocs.org/projects/ic-analysis/badge/?version=latest)](https://ic-analysis.readthedocs.io/en/latest/?badge=latest) 
-[![Example Datasets on Zenodo](https://img.shields.io/badge/Example%20Datasets-10.5281%2Fzenodo.21603005-blue)](https://doi.org/10.5281/zenodo.21603005) 
+
 [![Read the docs](https://badgen.net/badge/rtd/Documentation)](https://ic-analysis.readthedocs.io)-->
+
+<p align="center">
+  <img src="/figures/logo.png" width="55%" />
+</p>
 
 A Python toolkit for standardizing the analysis of *IntelliCage* experiments.
 
 The package provides reusable tools to load *IntelliCage* text exports, define experiment and subject metadata directly in Python, merge those metadata with visit and nose-poke records, compute behavioral metrics, and create publication-oriented summary plots. Raw export folders are treated as technical export blocks; biological analysis phases are defined by subject-specific time windows, ensuring standardized analysis across experiments.
 
+![Example outputs from the IntelliCage Analysis Toolkit](figures/ic_analysis_toolkit_example.jpg)
 
 ## Installation
 The toolkit requires Python 3.12 or newer.
@@ -158,9 +163,10 @@ It follows a four-phase *IntelliCage* place learning and place reversal protocol
 - Phase 4, PR: 194-266 h, place reversal with a new rewarded corner and
   tracking of visits to the previous correct corner.
 
-The run-group folders intentionally start at different real clock times: Group
-A begins on 2026-01-05 at 06:00, while Group B begins 7.5 h later at 13:30.
-This demonstrates why real phase `time_window` values are stored per subject.
+The run-group folders intentionally start at different real dates: Group A
+begins on 2026-01-05 at 06:00, while the Group B run begins 12 days later on
+2026-01-17 at 06:00. Group B's first phase-1 visits are delayed by 7.5 h, which
+demonstrates why real phase `time_window` values are stored per subject.
 
 Real and synthetic datasets use the same cage-run plus export-block layout. In
 the public synthetic PL/PR dataset, the export blocks happen to be named
