@@ -170,5 +170,3 @@ This is the first public release of the *IntelliCage Analysis Toolkit*, then foc
 - Added development dependencies for testing and documentation via `pip install -e ".[dev]"`.
 - Added automated tests for loader behavior, aligned timing, core metrics, statistical summaries, plotting smoke tests, synthetic data generation, and the public demo script.
 - Established a test coverage threshold of 75% for the public `ic_analysis` package.
-
----
