@@ -209,6 +209,20 @@ def test_plotting_public_functions_smoke(aligned_visits, tmp_path: Path) -> None
         phase_display_names=PHASE_DISPLAY_NAMES,
         plot_style="bar",
         spread_metric="sem")
+    plot_experiment_dual_metric_bars(
+        visit_summary,
+        drinking_summary,
+        primary_mouse=visit_mouse,
+        secondary_mouse=drinking_mouse,
+        group_name="Group A",
+        bin_hours=12,
+        output_path=tmp_path / "dual_individual.png",
+        secondary_label="Drinking visits",
+        phase_window_table=phase_windows,
+        phase_display_names=PHASE_DISPLAY_NAMES,
+        plot_style="line",
+        spread_metric="sem",
+        single_group_display="individual")
     plot_experiment_dual_metric_groups(
         visit_summary,
         drinking_summary,
@@ -218,6 +232,18 @@ def test_plotting_public_functions_smoke(aligned_visits, tmp_path: Path) -> None
         secondary_label="Drinking visits",
         phase_window_table=phase_windows,
         phase_display_names=PHASE_DISPLAY_NAMES)
+    plot_experiment_dual_metric_groups(
+        visit_summary,
+        drinking_summary,
+        group_names=GROUP_NAMES,
+        bin_hours=12,
+        output_path=tmp_path / "dual_groups_drinking_only.png",
+        secondary_label="Drinking visits",
+        phase_window_table=phase_windows,
+        phase_display_names=PHASE_DISPLAY_NAMES,
+        show_all_visits=False,
+        show_all_groups_sem=True,
+        spread_metric="sem")
     plot_phase2_adaptation(
         phase2["visits"][1],
         phase2["drinking_metric"][1],

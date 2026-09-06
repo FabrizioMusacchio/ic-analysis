@@ -22,6 +22,7 @@ from . import plotting as plotting_module
 from .plotting import (
     configure_plot_style,
     plot_bottle_preference_groups,
+    plot_bottle_preference_day_violin,
     set_group_colors)
 from .workflows import place_learning_reversal as plr
 # %% TYPES
@@ -508,18 +509,18 @@ class IntelliCageExperiment:
         :returns: The output directory as ``Path``.
         """
 
-        visits = self._prepared_visits(phase_max_hours=phase_max_hours, dayphase=dayphase)
-        available_phases = list(self.experiment.phases)
-        selected_phases = _normalize_phase_selection(phases, available_phases)
-        phase_visits = visits.loc[visits["AnalysisPhaseNumber"].notna()].copy()
-        selected_visits = phase_visits.loc[phase_visits["AnalysisPhaseNumber"].astype(int).isin(selected_phases)].copy()
-        if selected_visits.empty:
-            raise ValueError(f"No visits were available for phases {selected_phases}.")
+        selected_visits, selected_phases, available_phases = self._selected_phase_visits(
+            phases=phases,
+            phase_max_hours=phase_max_hours,
+            dayphase=dayphase)
+        selected_visits, phase_window_table, origin_clock_hour = self._compact_phase_timeline(
+            selected_visits,
+            selected_phases=selected_phases,
+            bin_hours=int(bin_hours))
         self._apply_plot_settings(base_font_size=base_font_size, font_family=font_family)
         layout = PlotLayout.from_mapping(plot_layout)
         destination = Path(output_dir) if output_dir is not None else _binned_output_dir(self.results_data_path, bin_hours, dayphase)
         destination.mkdir(parents=True, exist_ok=True)
-        phase_window_table = mt.build_analysis_phase_window_table(selected_visits, self.scheduled_phase_start_hours)
         mouse_bins, summary_bins = mt.compute_experiment_visit_bins(selected_visits, bin_hours=int(bin_hours))
         phase_tag = _phase_file_tag(selected_phases, available_phases)
         prefix = "overview_all_phases_visits" if selected_phases == available_phases else f"mice_activity_{phase_tag}"
@@ -529,6 +530,9 @@ class IntelliCageExperiment:
             selected_visits.groupby("Group", observed=True)["analysis_experiment_elapsed_hours"].max()
             + float(bin_hours)
         ).astype(float).to_dict()
+        phase_xlim = (
+            float(phase_window_table["start_hours"].min()),
+            float(phase_window_table["end_hours"].max()))
         with _temporary_figsize(("LONG_FIGSIZE_CM", "WIDE_GROUP_FIGSIZE_CM"), layout.figsize_cm or figsize_cm):
             for group_name in plr.ordered_group_names(selected_visits):
                 plr.plot_experiment_overview(
@@ -540,17 +544,17 @@ class IntelliCageExperiment:
                     phase_window_table=phase_window_table,
                     phase_display_names=self.phase_display_names,
                     spread_metric=spread_metric,
-                    x_end_hours=layout.xlim[1] if layout.xlim else group_end_hours.get(group_name),
+                    x_end_hours=layout.xlim[1] if layout.xlim else phase_xlim[1],
                     plot_style=plot_style,
                     title_label=layout.title or "visits across selected phases",
                     ylabel=layout.ylabel or "Visits per mouse and bin",
-                    origin_clock_hour=self.experiment.mouse_day_start_hour,
+                    origin_clock_hour=origin_clock_hour,
                     awake_start_clock_hour=self.awake_start_clock_hour,
                     awake_end_clock_hour=self.awake_end_clock_hour,
                     show_legend=True if layout.legend is None else bool(layout.legend),
                     legend_loc=layout.legend_loc,
                     legend_font_size=layout.legend_font_size,
-                    xlim=layout.xlim,
+                    xlim=layout.xlim or phase_xlim,
                     ylim=layout.ylim,
                     xticks=layout.xticks,
                     yticks=layout.yticks,
@@ -562,17 +566,19 @@ class IntelliCageExperiment:
                 phase_window_table=phase_window_table,
                 phase_display_names=self.phase_display_names,
                 spread_metric=spread_metric,
-                x_end_hours=layout.xlim[1] if layout.xlim else None,
+                legend_spread_label=False,
+                x_end_hours=layout.xlim[1] if layout.xlim else phase_xlim[1],
                 plot_style=plot_style,
                 title_label=layout.title or f"Group-average visits across selected phases, μ ± {spread_metric.upper()}",
                 ylabel=layout.ylabel or "Visits per mouse and bin",
-                origin_clock_hour=self.experiment.mouse_day_start_hour,
+                origin_clock_hour=origin_clock_hour,
                 awake_start_clock_hour=self.awake_start_clock_hour,
                 awake_end_clock_hour=self.awake_end_clock_hour,
                 show_legend=True if layout.legend is None else bool(layout.legend),
+                legend_inside=True,
                 legend_loc=layout.legend_loc,
                 legend_font_size=layout.legend_font_size,
-                xlim=layout.xlim,
+                xlim=layout.xlim or phase_xlim,
                 ylim=layout.ylim,
                 xticks=layout.xticks,
                 yticks=layout.yticks,
@@ -592,6 +598,9 @@ class IntelliCageExperiment:
         spread_metric: SpreadMetric = "sem",
         plot_style: str = "line",
         day_night_indicator: tuple[str, str] | None = ("awake", "sleep"),
+        show_all_visits: bool = True,
+        show_all_groups_SEM: bool = False,
+        single_group_display: Literal["spread", "individual"] = "spread",
         output_dir: Path | None = None,
         plot_layout: PlotLayout | dict | None = None,
         base_font_size: float = 10.0,
@@ -602,9 +611,11 @@ class IntelliCageExperiment:
         This diagnostic plot compares all visits with visits that contain
         licking. In formula form, the two plotted binned values are
         ``visits_per_bin`` and ``lick_positive_visits_per_bin`` per mouse,
-        summarized as group mean plus the selected spread. For selected phases,
-        the x-axis is compacted so only requested phases are shown; for example
-        ``phases=(2, 4)`` places phase 4 directly after phase 2.
+        summarized as group mean plus the selected spread. The x-axis remains
+        on elapsed experimental time. With ``phases="all"``, the full prepared
+        timeline is shown. For phase subsets, only the requested phase windows
+        are displayed while their real position on the experimental timeline is
+        preserved.
 
         :param phases: Phase selection. Default is ``2`` for the usual
             nose-poke adaptation phase. Use ``"all"``, an integer, or a tuple of
@@ -620,6 +631,16 @@ class IntelliCageExperiment:
             ``None``.
         :param spread_metric: ``"sem"`` or ``"std"``. Default is ``"sem"``.
         :param plot_style: ``"line"`` or ``"bar"``. Default is ``"line"``.
+        :param show_all_visits: Whether the all-groups plot includes total
+            visits in addition to drinking visits. Default is ``True``. If
+            ``False``, only drinking visits are shown as solid group traces.
+        :param show_all_groups_SEM: Whether the all-groups plot shades the
+            selected spread around each group mean. Default is ``False`` for a
+            cleaner multi-group overview.
+        :param single_group_display: ``"spread"`` plots group mean plus
+            ``spread_metric`` for each single-group panel. ``"individual"``
+            plots each mouse as a thin trace and overlays the group mean as a
+            thicker trace. Default is ``"spread"``.
         :param output_dir: Optional output folder. Default is a bin/dayphase
             folder below the experiment results folder.
         :param plot_layout: Optional ``dict`` or :class:`PlotLayout`. Supported
@@ -633,6 +654,8 @@ class IntelliCageExperiment:
         :returns: The output directory as ``Path``.
         """
 
+        if single_group_display not in {"spread", "individual"}:
+            raise ValueError("`single_group_display` must be 'spread' or 'individual'.")
         selected = phase_number if phase_number is not None else phases
         visits, selected_phases, available_phases = self._selected_phase_visits(
             phases=selected,
@@ -657,7 +680,9 @@ class IntelliCageExperiment:
         plr.save_table(secondary_summary, destination / f"{file_stub}_drinking_visits_group_summary_{int(bin_hours)}h.tsv")
         with _temporary_figsize(("LONG_FIGSIZE_2_CM",), layout.figsize_cm or figsize_cm):
             self._plot_dual_experiment_metric(
+                primary_mouse,
                 primary_summary,
+                secondary_mouse,
                 secondary_summary,
                 destination=destination,
                 file_stub=file_stub,
@@ -668,7 +693,10 @@ class IntelliCageExperiment:
                 plot_style=plot_style,
                 layout=layout,
                 day_night_indicator=day_night_indicator,
-                origin_clock_hour=origin_clock_hour)
+                origin_clock_hour=origin_clock_hour,
+                show_all_visits=show_all_visits,
+                show_all_groups_SEM=show_all_groups_SEM,
+                single_group_display=single_group_display)
         return destination
 
     def plot_NP_counts(
@@ -843,15 +871,17 @@ class IntelliCageExperiment:
         plot_style: str = "line",
         x_unit: Literal["hours", "days", "weeks"] = "hours",
         indicate_dots: bool = False,
+        calc_stats: bool = False,
         output_dir: Path | None = None,
         plot_layout: PlotLayout | dict | None = None,
         base_font_size: float = 10.0,
         font_family: str = "Arial",
         figsize_cm: tuple[float, float] | None = None,
-        day_night_indicator: tuple[str, str] | None = ("awake", "sleep")) -> Path:
+        day_night_indicator: tuple[str, str] | None = None) -> Path:
         """Plot left/right bottle consumption or relative bottle preference.
 
-        Bottle use is computed from nose-poke side events. Raw modes plot
+        Bottle use is computed from nose-poke side events. The ``"all"`` mode
+        plots summed consumption from both side classes. Other raw modes plot
         summed consumption for one side class. Relative modes compute
         ``left / (left + right)`` or ``right / (left + right)`` per mouse and
         bin, then plot group mean preference in percent. Binned x positions are
@@ -866,7 +896,7 @@ class IntelliCageExperiment:
         :param right_bottle: Label for right-side bottle positions. Default is
             ``"saccharin"``.
         :param calc: Calculation mode. Default is ``"left_bottle"``. Accepted
-            values are ``"left_bottle"``, ``"right_bottle"``,
+            values are ``"all"``, ``"left_bottle"``, ``"right_bottle"``,
             ``"left_bottle/right_bottle"``, and
             ``"right_bottle/left_bottle"``.
         :param bin_h: Bin width in hours. Default is ``24``. Use ``1`` for
@@ -885,6 +915,12 @@ class IntelliCageExperiment:
             ``"hours"``, ``"days"``, and ``"weeks"``.
         :param indicate_dots: If ``True``, draws a point at each binned mean.
             Default is ``False``. Useful for daily or weekly bins.
+        :param calc_stats: If ``True``, computes bin-wise group tests on
+            mouse-level values and annotates significant bins in the plot.
+            Two groups are compared by Welch's t-test for normal data and
+            Mann-Whitney U otherwise. More than two groups are tested by
+            one-way ANOVA for normal data and Kruskal-Wallis otherwise.
+            Default is ``False``.
         :param output_dir: Optional output folder. Default is a bin/dayphase
             folder below the experiment results folder.
         :param plot_layout: Optional ``dict`` or :class:`PlotLayout` with
@@ -893,16 +929,29 @@ class IntelliCageExperiment:
         :param base_font_size: Base font size in points. Default is ``10.0``.
         :param font_family: Matplotlib font family. Default is ``"Arial"``.
         :param figsize_cm: Optional figure size as ``(width_cm, height_cm)``.
-        :param day_night_indicator: Background labels, default
-            ``("awake", "sleep")``. Labels are shown only when ``x_unit`` is
-            ``"hours"``.
+        :param day_night_indicator: Optional background labels for awake and
+            sleep periods. Default is ``None``. Use e.g. ``("aw", "sl")`` to
+            draw the same day/night indicator used by the activity plots.
         :returns: The output directory as ``Path``.
         """
 
-        visits = self._prepared_visits(phase_max_hours=phase_max_hours, dayphase=dayphase)
         available_phases = list(self.experiment.phases)
         selected_phases = _normalize_phase_selection(phases, available_phases)
+        selected_visits, _, _ = self._selected_phase_visits(
+            phases=phases,
+            phase_max_hours=phase_max_hours,
+            dayphase=dayphase)
+        visits, phase_window_table, origin_clock_hour = self._compact_phase_timeline(
+            selected_visits,
+            selected_phases=selected_phases,
+            bin_hours=int(bin_h))
         nosepokes = self._analysis_nosepokes_with_timing(phase_max_hours=phase_max_hours, dayphase=dayphase)
+        nosepokes = nosepokes.loc[nosepokes["AnalysisPhaseNumber"].notna()].copy()
+        nosepokes = nosepokes.loc[nosepokes["AnalysisPhaseNumber"].astype(int).isin(selected_phases)].copy()
+        nosepokes, _, _ = self._compact_phase_timeline(
+            nosepokes,
+            selected_phases=selected_phases,
+            bin_hours=int(bin_h))
         self._apply_plot_settings(base_font_size=base_font_size, font_family=font_family)
         layout = PlotLayout.from_mapping(plot_layout)
         destination = Path(output_dir) if output_dir is not None else _binned_output_dir(self.results_data_path, bin_h, dayphase)
@@ -920,12 +969,10 @@ class IntelliCageExperiment:
         file_stem = f"bottle_preference_{calc_tag}_{phase_tag}_{_bin_file_tag(bin_h)}"
         plr.save_table(mouse_bins, destination / f"{file_stem}_mouse_bins.tsv")
         plr.save_table(summary_bins, destination / f"{file_stem}_group_summary.tsv")
-        selected_phase_visits = visits.loc[visits["AnalysisPhaseNumber"].notna()].copy()
-        selected_phase_visits = selected_phase_visits.loc[
-            selected_phase_visits["AnalysisPhaseNumber"].astype(int).isin(selected_phases)].copy()
-        phase_window_table = mt.build_analysis_phase_window_table(
-            selected_phase_visits,
-            self.scheduled_phase_start_hours)
+        stats_table = None
+        if calc_stats:
+            stats_table = mt.compute_binned_group_statistics(mouse_bins)
+            plr.save_table(stats_table, destination / f"{file_stem}_binwise_group_tests.tsv")
         plot_bottle_preference_groups(
             summary_bins,
             output_path=destination / f"{file_stem}_all_groups.png",
@@ -937,6 +984,7 @@ class IntelliCageExperiment:
             plot_style=plot_style,
             x_unit=x_unit,
             indicate_dots=indicate_dots,
+            stats_table=stats_table,
             figsize_cm=layout.figsize_cm or figsize_cm,
             show_legend=True if layout.legend is None else bool(layout.legend),
             legend_loc=layout.legend_loc,
@@ -950,10 +998,127 @@ class IntelliCageExperiment:
             phase_display_names=self.phase_display_names,
             title_label=layout.title,
             ylabel=layout.ylabel,
-            origin_clock_hour=self.experiment.mouse_day_start_hour,
+            origin_clock_hour=origin_clock_hour,
             awake_start_clock_hour=self.awake_start_clock_hour,
             awake_end_clock_hour=self.awake_end_clock_hour,
             day_night_indicator=day_night_indicator)
+        return destination
+
+    def plot_bottle_preference_day(
+        self,
+        *,
+        experiment_day: int,
+        phases: PhaseSelection = "all",
+        dayphase: DayPhase = "day",
+        left_bottle: str = "plain water",
+        right_bottle: str = "saccharin",
+        calc: str = "right_bottle/left_bottle",
+        phase_max_hours: dict[int, float] | None = None,
+        consumption_col: str = "LickNumber",
+        left_sides: tuple[int, ...] | list[int] = (1, 3, 5, 7),
+        right_sides: tuple[int, ...] | list[int] = (2, 4, 6, 8),
+        calc_stats: bool = True,
+        output_dir: Path | None = None,
+        plot_layout: PlotLayout | dict | None = None,
+        show_N: bool = True,
+        xtick_rotation: float = 25.0,
+        base_font_size: float = 10.0,
+        font_family: str = "Arial",
+        figsize_cm: tuple[float, float] | None = None) -> Path:
+        """Plot bottle consumption or preference for one experimental day.
+
+        This endpoint uses the same ``calc`` modes as
+        :meth:`plot_bottle_preference`, but collapses one selected experimental
+        day into one mouse-level value and renders a group violin plot. It is
+        useful for explicit endpoint comparisons such as saccharin preference
+        or total liquid uptake on the last protocol day.
+
+        :param experiment_day: Zero-based experimental day to summarize, e.g.
+            ``10`` for ``Day 10``.
+        :param phases: Phase selection. Default is ``"all"``.
+        :param dayphase: ``"day"``, ``"night"``, or ``"all"``. Default is
+            ``"day"``.
+        :param left_bottle: Label for left-side bottle positions. Default is
+            ``"plain water"``.
+        :param right_bottle: Label for right-side bottle positions. Default is
+            ``"saccharin"``.
+        :param calc: Calculation mode. Default is
+            ``"right_bottle/left_bottle"``. Accepted values are ``"all"``,
+            ``"left_bottle"``, ``"right_bottle"``,
+            ``"left_bottle/right_bottle"``, and
+            ``"right_bottle/left_bottle"``.
+        :param phase_max_hours: Optional phase limits in hours. Default is
+            ``None``.
+        :param consumption_col: Nose-poke column to sum. Default is
+            ``"LickNumber"``.
+        :param left_sides: Side numbers treated as left bottle positions.
+            Default is ``(1, 3, 5, 7)``.
+        :param right_sides: Side numbers treated as right bottle positions.
+            Default is ``(2, 4, 6, 8)``.
+        :param calc_stats: Whether to compute and annotate a group test.
+            Default is ``True``.
+        :param output_dir: Optional output folder. Default is
+            ``results/bottle_preference_summary``.
+        :param plot_layout: Optional ``dict`` or :class:`PlotLayout` with
+            ``title``, ``ylabel``, ``ylim``, ``yticks``, and ``figsize_cm``.
+        :param show_N: Whether group labels include sample size. Default is
+            ``True``.
+        :param xtick_rotation: Rotation angle for group labels. Default is
+            ``25.0``.
+        :param base_font_size: Base font size in points. Default is ``10.0``.
+        :param font_family: Matplotlib font family. Default is ``"Arial"``.
+        :param figsize_cm: Optional figure size as ``(width_cm, height_cm)``.
+        :param day_night_indicator: Labels for the active/inactive background
+            shading. Default is ``("awake", "sleep")``. Use e.g.
+            ``("aw", "sl")`` for compact labels or ``None`` to hide labels
+            while keeping the sleep shading.
+        :returns: The output directory as ``Path``.
+        """
+
+        available_phases = list(self.experiment.phases)
+        selected_phases = _normalize_phase_selection(phases, available_phases)
+        nosepokes = self._analysis_nosepokes_with_timing(phase_max_hours=phase_max_hours, dayphase=dayphase)
+        nosepokes = nosepokes.loc[nosepokes["AnalysisPhaseNumber"].notna()].copy()
+        nosepokes = nosepokes.loc[nosepokes["AnalysisPhaseNumber"].astype(int).isin(selected_phases)].copy()
+        mouse_bins, _ = mt.compute_bottle_preference_bins(
+            nosepokes,
+            phases=selected_phases,
+            bin_h=24,
+            left_sides=left_sides,
+            right_sides=right_sides,
+            consumption_col=consumption_col,
+            calc=calc)
+        day_start_hours = float(int(experiment_day) * 24)
+        day_values = mouse_bins.loc[mouse_bins["bin_start_hours"].round(8).eq(round(day_start_hours, 8))].copy()
+        destination = Path(output_dir) if output_dir is not None else self.results_data_path / "bottle_preference_summary"
+        destination.mkdir(parents=True, exist_ok=True)
+        self._apply_plot_settings(base_font_size=base_font_size, font_family=font_family)
+        layout = PlotLayout.from_mapping(plot_layout)
+        phase_tag = _phase_file_tag(selected_phases, available_phases)
+        calc_tag = plr.sanitize_filename_part(calc.replace("/", "_over_"))
+        dayphase_tag = {"day": "awake", "night": "sleep", "all": "full_day"}[dayphase]
+        file_stem = f"bottle_preference_{calc_tag}_{phase_tag}_day{int(experiment_day)}_{dayphase_tag}"
+        plr.save_table(day_values, destination / f"{file_stem}_mouse.tsv")
+        stats_table = None
+        if calc_stats and not day_values.empty:
+            stats_table = mt.compute_binned_group_statistics(day_values)
+            plr.save_table(stats_table, destination / f"{file_stem}_group_test.tsv")
+        plot_bottle_preference_day_violin(
+            day_values,
+            output_path=destination / f"{file_stem}_violin.png",
+            experiment_day=int(experiment_day),
+            left_bottle=left_bottle,
+            right_bottle=right_bottle,
+            calc=calc,
+            stats_table=stats_table,
+            dayphase_label=dayphase_tag.replace("_", " "),
+            figsize_cm=layout.figsize_cm or figsize_cm,
+            show_n=show_N if "show_N" not in layout.extra else bool(layout.extra["show_N"]),
+            xtick_rotation=float(layout.extra.get("xtick_rotation", xtick_rotation)),
+            ylim=layout.ylim,
+            yticks=layout.yticks,
+            title=layout.title,
+            ylabel=layout.ylabel)
         return destination
 
     def plot_plr_learning_rate(
@@ -1000,6 +1165,10 @@ class IntelliCageExperiment:
         :param base_font_size: Base font size in points. Default is ``10.0``.
         :param font_family: Matplotlib font family. Default is ``"Arial"``.
         :param figsize_cm: Optional figure size as ``(width_cm, height_cm)``.
+        :param day_night_indicator: Labels for the active/inactive background
+            shading. Default is ``("awake", "sleep")``. Use e.g.
+            ``("aw", "sl")`` for compact labels or ``None`` to hide labels
+            while keeping the sleep shading.
         :returns: The output directory as ``Path``.
         """
 
@@ -1199,7 +1368,8 @@ class IntelliCageExperiment:
         plot_layout: PlotLayout | dict | None = None,
         base_font_size: float = 10.0,
         font_family: str = "Arial",
-        figsize_cm: tuple[float, float] | None = None) -> Path:
+        figsize_cm: tuple[float, float] | None = None,
+        day_night_indicator: tuple[str, str] | None = ("awake", "sleep")) -> Path:
         """Plot new, previous, and neutral corner components for reversal.
 
         This decomposes reversal-phase corner visits into four mutually
@@ -1226,6 +1396,10 @@ class IntelliCageExperiment:
         :param base_font_size: Base font size in points. Default is ``10.0``.
         :param font_family: Matplotlib font family. Default is ``"Arial"``.
         :param figsize_cm: Optional figure size as ``(width_cm, height_cm)``.
+        :param day_night_indicator: Labels for the active/inactive background
+            shading. Default is ``("awake", "sleep")``. Use e.g.
+            ``("aw", "sl")`` for compact labels or ``None`` to hide labels
+            while keeping the sleep shading.
         :returns: The output directory as ``Path``.
         """
 
@@ -1267,7 +1441,8 @@ class IntelliCageExperiment:
                     yticks=layout.yticks,
                     xlabel=layout.xlabel,
                     ylabel=layout.ylabel,
-                    title_label=layout.title)
+                    title_label=layout.title,
+                    day_night_indicator=day_night_indicator)
         return destination
 
     def plot_phase_activity_summary(
@@ -1280,6 +1455,8 @@ class IntelliCageExperiment:
         plot_layout: PlotLayout | dict | None = None,
         show_N: bool = True,
         xtick_rotation: float = 45.0,
+        median_line_width: float = 1.2,
+        median_marker_size: float = 4.0,
         base_font_size: float = 10.0,
         font_family: str = "Arial",
         figsize_cm: tuple[float, float] | None = None) -> Path:
@@ -1297,7 +1474,7 @@ class IntelliCageExperiment:
         :param phase_max_hours: Optional phase limits in hours. Default is
             ``None``.
         :param output_dir: Optional output folder. Default is
-            ``results/plr_activity``.
+            ``results/visit_activity_summary``.
         :param plot_layout: Optional ``dict`` or :class:`PlotLayout`. Supported
             keys are ``title``, ``ylabel``, ``ylim``, ``yticks``, ``legend``,
             ``figsize_cm``, plus ``show_N`` and ``xtick_rotation`` in
@@ -1306,6 +1483,10 @@ class IntelliCageExperiment:
             Default is ``True``.
         :param xtick_rotation: Rotation angle for group labels. Default is
             ``45.0``.
+        :param median_line_width: Width of the line connecting phase medians or
+            means within each group. Default is ``1.2``.
+        :param median_marker_size: Marker size for the connected phase summary
+            points. Default is ``4.0``.
         :param base_font_size: Base font size in points. Default is ``10.0``.
         :param font_family: Matplotlib font family. Default is ``"Arial"``.
         :param figsize_cm: Optional figure size as ``(width_cm, height_cm)``.
@@ -1313,25 +1494,34 @@ class IntelliCageExperiment:
         """
 
         visits = self._prepared_visits(phase_max_hours=phase_max_hours, dayphase=dayphase)
-        destination = Path(output_dir) if output_dir is not None else self.results_data_path / "plr_activity"
+        destination = Path(output_dir) if output_dir is not None else self.results_data_path / "visit_activity_summary"
         destination.mkdir(parents=True, exist_ok=True)
         self._apply_plot_settings(base_font_size=base_font_size, font_family=font_family)
         layout = PlotLayout.from_mapping(plot_layout)
-        plr.render_phase_activity_plot(
-            visits,
-            destination,
+        mouse_phase_activity = mt.compute_phase_activity_medians(visits)
+        activity_stats = mt.compute_phase_activity_statistics(mouse_phase_activity)
+        value_col = "median_visits_per_hour" if summary_metric == "median" else "mean_visits_per_hour"
+        metric_tag = "median" if summary_metric == "median" else "mean"
+        plr.save_table(mouse_phase_activity, destination / f"phase_activity_{metric_tag}_visits_per_hour_mouse.tsv")
+        plr.save_table(activity_stats, destination / f"phase_activity_{metric_tag}_visits_per_hour_stats.tsv")
+        plotting_module.plot_phase_activity_boxplot(
+            mouse_phase_activity,
+            activity_stats,
             phase_display_names=self.phase_display_names,
-            summary_metric=summary_metric,
+            output_path=destination / f"phase_activity_{metric_tag}_visits_per_hour_boxplot.png",
+            value_col=value_col,
+            title=layout.title or "Mice activity per group and phase",
+            ylabel=layout.ylabel or f"{metric_tag.capitalize()} number of corner visits per hour",
             figsize_cm=layout.figsize_cm or figsize_cm,
             show_legend=True if layout.legend is None else bool(layout.legend),
             legend_loc=layout.legend_loc,
             legend_font_size=layout.legend_font_size,
             show_n=show_N if "show_N" not in layout.extra else bool(layout.extra["show_N"]),
             xtick_rotation=float(layout.extra.get("xtick_rotation", xtick_rotation)),
+            median_line_width=float(layout.extra.get("median_line_width", median_line_width)),
+            median_marker_size=float(layout.extra.get("median_marker_size", median_marker_size)),
             ylim=layout.ylim,
-            yticks=layout.yticks,
-            title=layout.title,
-            ylabel=layout.ylabel)
+            yticks=layout.yticks)
         return destination
 
     def plot_plr_phase_segment_rate(
@@ -1986,7 +2176,9 @@ class IntelliCageExperiment:
             ``results/plr_derived``.
         :param plot_layout: Optional ``dict`` or :class:`PlotLayout`. Supported
             keys are ``title``, ``ylabel``, ``ylim``, ``legend``,
-            ``legend_loc``, ``legend_font_size``, and ``figsize_cm``.
+            ``legend_loc``, ``legend_font_size``, ``figsize_cm``, and the
+            plot-specific ``stats_bracket_drop`` for manually adjusting the
+            vertical length of significance brackets.
         :param base_font_size: Base font size in points. Default is ``10.0``.
         :param font_family: Matplotlib font family. Default is ``"Arial"``.
         :param figsize_cm: Optional figure size as ``(width_cm, height_cm)``.
@@ -2052,7 +2244,11 @@ class IntelliCageExperiment:
                     reference_line=reference_line,
                     value_scale=float(value_scale),
                     format_as_percent=format_as_percent,
-                    y_limits=layout.ylim)
+                    y_limits=layout.ylim,
+                    stats_bracket_drop=(
+                        None
+                        if "stats_bracket_drop" not in layout.extra
+                        else float(layout.extra["stats_bracket_drop"])))
         return destination
 
     def plot_plr_cumulative_preferences(
@@ -2152,32 +2348,48 @@ class IntelliCageExperiment:
         *,
         selected_phases: list[int],
         bin_hours: int) -> tuple[pd.DataFrame, pd.DataFrame, float]:
-        """Rewrite experiment elapsed time so selected phases appear without gaps."""
+        """Return selected visits with visible phase windows on experiment time.
+
+        When all phases are selected, the prepared experiment-time axis is
+        returned unchanged. For phase subsets, the event times also remain on
+        the prepared experiment-time axis; only the visible phase-band table is
+        restricted to the selected phases. This keeps awake/sleep indicators in
+        the correct clock position. For example, phase 2 starts around
+        experiment hour 74, not at x=0.
+        """
 
         compact = visits.copy()
+        available_phases = list(self.experiment.phases)
+        sorted_starts = sorted((int(key), float(value)) for key, value in self.scheduled_phase_start_hours.items())
+        if selected_phases == available_phases:
+            return (
+                compact,
+                mt.build_analysis_phase_window_table(compact, self.scheduled_phase_start_hours),
+                self.experiment.mouse_day_start_hour)
+
         phase_rows: list[dict[str, float | int]] = []
-        offset_hours = 0.0
         for phase_number in selected_phases:
-            phase_mask = compact["AnalysisPhaseNumber"].astype(int).eq(int(phase_number))
+            phase_number = int(phase_number)
+            phase_mask = compact["AnalysisPhaseNumber"].astype(int).eq(phase_number)
             phase_data = compact.loc[phase_mask]
             if phase_data.empty:
                 continue
-            phase_elapsed = phase_data["analysis_phase_elapsed_hours"].astype(float)
-            compact.loc[phase_mask, "analysis_experiment_elapsed_hours"] = phase_elapsed + offset_hours
-            duration_hours = float(phase_elapsed.max()) + float(bin_hours)
-            duration_hours = max(float(bin_hours), duration_hours)
+            start_index = [index for index, (candidate, _) in enumerate(sorted_starts) if candidate == phase_number]
+            phase_start_hours = float(self.scheduled_phase_start_hours[phase_number])
+            if start_index and start_index[0] + 1 < len(sorted_starts):
+                phase_end_hours = float(sorted_starts[start_index[0] + 1][1])
+            else:
+                phase_end_hours = float(phase_data["analysis_experiment_elapsed_hours"].max()) + float(bin_hours)
             phase_rows.append({
-                "PhaseNumber": int(phase_number),
-                "start_hours": offset_hours,
-                "end_hours": offset_hours + duration_hours})
-            offset_hours += duration_hours
+                "PhaseNumber": phase_number,
+                "start_hours": phase_start_hours,
+                "end_hours": phase_end_hours})
         if not phase_rows:
             raise ValueError(f"No visits were available for phases {selected_phases}.")
-        first_phase_start = self.scheduled_phase_start_hours[int(selected_phases[0])]
         return (
             compact,
             pd.DataFrame(phase_rows),
-            plr.phase_origin_clock_hour(self.experiment.mouse_day_start_hour, first_phase_start))
+            self.experiment.mouse_day_start_hour)
 
     def _plot_single_experiment_metric(
         self,
@@ -2201,9 +2413,12 @@ class IntelliCageExperiment:
         plr.save_table(mouse_bins, destination / f"{file_stub}_mouse_bins_{bin_hours}h.tsv")
         plr.save_table(summary_bins, destination / f"{file_stub}_group_summary_{bin_hours}h.tsv")
         group_end_hours = summary_bins.groupby("Group", observed=True)["bin_end_hours"].max().astype(float).to_dict()
-        all_group_end = float(summary_bins["bin_end_hours"].max())
+        phase_xlim = (
+            float(phase_window_table["start_hours"].min()),
+            float(phase_window_table["end_hours"].max()))
+        all_group_end = phase_xlim[1]
         for group_name in plr.ordered_group_names(summary_bins):
-            default_xlim = None if group_name not in group_end_hours else (0.0, group_end_hours[group_name])
+            default_xlim = phase_xlim
             plr.plot_experiment_overview(
                 mouse_bins,
                 summary_bins,
@@ -2214,7 +2429,7 @@ class IntelliCageExperiment:
                 phase_display_names=self.phase_display_names,
                 spread_metric=spread_metric,
                 legend_spread_label=legend_spread_label,
-                x_end_hours=layout.xlim[1] if layout.xlim else group_end_hours.get(group_name),
+                x_end_hours=layout.xlim[1] if layout.xlim else phase_xlim[1],
                 plot_style=plot_style,
                 show_individual_labels=False,
                 title_label=title_label,
@@ -2247,10 +2462,10 @@ class IntelliCageExperiment:
             awake_start_clock_hour=self.awake_start_clock_hour,
             awake_end_clock_hour=self.awake_end_clock_hour,
             show_legend=True if layout.legend is None else bool(layout.legend),
-            legend_inside=not legend_spread_label,
+            legend_inside=True,
             legend_loc=layout.legend_loc,
             legend_font_size=layout.legend_font_size,
-            xlim=layout.xlim or (0.0, all_group_end),
+            xlim=layout.xlim or phase_xlim,
             ylim=layout.ylim,
             xticks=layout.xticks,
             yticks=layout.yticks,
@@ -2259,7 +2474,9 @@ class IntelliCageExperiment:
 
     def _plot_dual_experiment_metric(
         self,
+        primary_mouse: pd.DataFrame,
         primary_summary: pd.DataFrame,
+        secondary_mouse: pd.DataFrame,
         secondary_summary: pd.DataFrame,
         *,
         destination: Path,
@@ -2271,14 +2488,21 @@ class IntelliCageExperiment:
         plot_style: str,
         layout: PlotLayout,
         day_night_indicator: tuple[str, str] | None,
-        origin_clock_hour: float) -> None:
+        origin_clock_hour: float,
+        show_all_visits: bool = True,
+        show_all_groups_SEM: bool = False,
+        single_group_display: Literal["spread", "individual"] = "spread") -> None:
         """Plot one visits-versus-secondary full-timeline metric."""
 
-        group_end_hours = primary_summary.groupby("Group", observed=True)["bin_end_hours"].max().astype(float).to_dict()
+        phase_xlim = (
+            float(phase_window_table["start_hours"].min()),
+            float(phase_window_table["end_hours"].max()))
         for group_name in plr.ordered_group_names(primary_summary):
             plr.plot_experiment_dual_metric_bars(
                 primary_summary,
                 secondary_summary,
+                primary_mouse=primary_mouse,
+                secondary_mouse=secondary_mouse,
                 group_name=group_name,
                 bin_hours=bin_hours,
                 output_path=destination / f"{file_stub}_{plr.sanitize_filename_part(group_name)}_{bin_hours}h.png",
@@ -2293,14 +2517,15 @@ class IntelliCageExperiment:
                 show_legend=True if layout.legend is None else bool(layout.legend),
                 legend_loc=layout.legend_loc,
                 legend_font_size=layout.legend_font_size,
-                xlim=layout.xlim if layout.xlim else (None if group_name not in group_end_hours else (0.0, group_end_hours[group_name])),
+                xlim=layout.xlim or phase_xlim,
                 ylim=layout.ylim,
                 xticks=layout.xticks,
                 yticks=layout.yticks,
                 xlabel=layout.xlabel,
                 ylabel=layout.ylabel,
                 title_label=layout.title,
-                day_night_indicator=day_night_indicator)
+                day_night_indicator=day_night_indicator,
+                single_group_display=single_group_display)
         plr.plot_experiment_dual_metric_groups(
             primary_summary,
             secondary_summary,
@@ -2310,20 +2535,23 @@ class IntelliCageExperiment:
             secondary_label=secondary_label,
             phase_window_table=phase_window_table,
             phase_display_names=self.phase_display_names,
-                origin_clock_hour=origin_clock_hour,
+            origin_clock_hour=origin_clock_hour,
             awake_start_clock_hour=self.awake_start_clock_hour,
             awake_end_clock_hour=self.awake_end_clock_hour,
             show_legend=True if layout.legend is None else bool(layout.legend),
             legend_loc=layout.legend_loc,
             legend_font_size=layout.legend_font_size,
-            xlim=layout.xlim,
+            xlim=layout.xlim or phase_xlim,
             ylim=layout.ylim,
             xticks=layout.xticks,
             yticks=layout.yticks,
             xlabel=layout.xlabel,
             ylabel=layout.ylabel,
             title_label=layout.title,
-            day_night_indicator=day_night_indicator)
+            day_night_indicator=day_night_indicator,
+            show_all_visits=show_all_visits,
+            show_all_groups_sem=show_all_groups_SEM,
+            spread_metric=spread_metric)
 
     def _plr_error_metric_spec(
         self,
@@ -2449,6 +2677,7 @@ class IntelliCageExperiment:
             "AnalysisPhaseNumber",
             "AnalysisPhase",
             "analysis_experiment_elapsed_hours",
+            "analysis_phase_start_hours",
             "analysis_phase_elapsed_hours",
             "analysis_experiment_day",
             "analysis_phase_day"]

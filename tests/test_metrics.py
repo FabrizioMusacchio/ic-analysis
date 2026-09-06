@@ -164,6 +164,17 @@ def test_bottle_preference_bins_capture_synthetic_group_difference(synthetic_coh
     assert left_mouse_bins["left_bottle_consumption"].sum() >= left_mouse_bins["value"].sum()
     assert left_summary["mean_value"].notna().any()
 
+    total_mouse_bins, total_summary = compute_bottle_preference_bins(
+        nosepokes,
+        phases="all",
+        bin_h=24,
+        calc="all")
+    expected_total = (
+        total_mouse_bins["left_bottle_consumption"]
+        + total_mouse_bins["right_bottle_consumption"])
+    assert np.allclose(total_mouse_bins["value"], expected_total)
+    assert total_summary["mean_value"].max() > 0.0
+
 def test_reversal_segment_and_awake_day_metrics(aligned_visits) -> None:
     rate_tables = compute_phase4_reversal_rate_bins(
         aligned_visits,

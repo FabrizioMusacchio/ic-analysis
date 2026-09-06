@@ -233,6 +233,7 @@ def plot_bottle_preference_groups(
     plot_style: str = "line",
     x_unit: Literal["hours", "days", "weeks"] = "hours",
     indicate_dots: bool = False,
+    stats_table: pd.DataFrame | None = None,
     figsize_cm: tuple[float, float] | None = None,
     show_legend: bool = True,
     legend_loc: str | int | None = None,
@@ -249,7 +250,7 @@ def plot_bottle_preference_groups(
     origin_clock_hour: float = 6.0,
     awake_start_clock_hour: float = 6.0,
     awake_end_clock_hour: float = 18.0,
-    day_night_indicator: tuple[str, str] | None = ("awake", "sleep")) -> None:
+    day_night_indicator: tuple[str, str] | None = None) -> None:
     """Plot binned bottle consumption or preference across groups."""
 
     if summary_bins.empty:
@@ -273,13 +274,23 @@ def plot_bottle_preference_groups(
         background_phase_window_table = phase_window_table.copy()
         background_phase_window_table["start_hours"] = background_phase_window_table["start_hours"].astype(float) / unit_factor
         background_phase_window_table["end_hours"] = background_phase_window_table["end_hours"].astype(float) / unit_factor
-    if x_unit == "hours":
+    if background_phase_window_table is not None and not background_phase_window_table.empty:
+        default_xlim = (
+            float(background_phase_window_table["start_hours"].min()),
+            float(background_phase_window_table["end_hours"].max()))
+        x_end = default_xlim[1]
+    else:
+        default_xlim = (0.0, x_end)
+    if day_night_indicator is not None:
         _add_awake_sleep_background(
             ax,
-            x_end=x_end,
+            x_start=default_xlim[0],
+            x_end=default_xlim[1],
             origin_clock_hour=origin_clock_hour,
             awake_start_clock_hour=awake_start_clock_hour,
             awake_end_clock_hour=awake_end_clock_hour,
+            axis_unit_factor=unit_factor,
+            label_y=0.910,
             day_night_indicator=day_night_indicator)
     if background_phase_window_table is not None and not background_phase_window_table.empty:
         _add_phase_band(ax, background_phase_window_table, phase_display_names=phase_display_names or {})
@@ -305,17 +316,24 @@ def plot_bottle_preference_groups(
         bottom = current_ylim[0] if ylim[0] is None else float(ylim[0])
         top = current_ylim[1] if ylim[1] is None else float(ylim[1])
         ax.set_ylim(bottom, top)
+    resolved_xlim = None
     if xlim is not None:
         current_xlim = ax.get_xlim()
         left = current_xlim[0] if xlim[0] is None else float(xlim[0])
         right = current_xlim[1] if xlim[1] is None else float(xlim[1])
-        ax.set_xlim(left, right)
+        resolved_xlim = (left, right)
     else:
-        ax.set_xlim(0.0, x_end)
+        resolved_xlim = default_xlim
     if xticks is not None:
         ax.set_xticks(list(xticks))
     if yticks is not None:
         ax.set_yticks(list(yticks))
+    ax.set_xlim(resolved_xlim)
+    _annotate_bin_significance(
+        ax,
+        stats_table,
+        unit_factor=unit_factor,
+        y_axis_fraction=0.80 if day_night_indicator is not None else 0.87)
     bin_label = float(bin_h) / unit_factor
     bin_text = f"{bin_label:g} {short_unit}"
     ax.set_xlabel(xlabel or f"Experiment time [{unit_label}], bin={bin_text}")
@@ -330,9 +348,43 @@ def plot_bottle_preference_groups(
             legend_font_size=legend_font_size)
     _save_figure(fig, Path(output_path))
 
+def _annotate_bin_significance(
+    ax: plt.Axes,
+    stats_table: pd.DataFrame | None,
+    *,
+    unit_factor: float,
+    y_axis_fraction: float = 0.91) -> None:
+    """Draw bin-wise significance stars in the visible plotting area."""
+
+    if stats_table is None or stats_table.empty:
+        return
+    x_left, x_right = ax.get_xlim()
+    y_min, y_max = ax.get_ylim()
+    y_pos = y_min + float(y_axis_fraction) * (y_max - y_min)
+    for _, row in stats_table.iterrows():
+        label = str(row.get("significance", "") or "")
+        if not label:
+            continue
+        x_value = float(row.get("bin_center_hours", row.get("bin_start_hours"))) / float(unit_factor)
+        if x_value < x_left or x_value > x_right:
+            continue
+        ax.text(
+            x_value,
+            y_pos,
+            label,
+            ha="center",
+            va="center",
+            fontsize=_font_size(-1.0),
+            fontweight="bold",
+            color="#1f1f1f",
+            clip_on=True,
+            zorder=8)
+
 def _bottle_preference_ylabel(calc: str, *, left_bottle: str, right_bottle: str) -> str:
     """Return a readable y-axis label for bottle-preference plots."""
 
+    if calc == "all":
+        return "Total bottle consumption [licks]"
     if calc == "left_bottle":
         return f"{left_bottle} consumption [licks]"
     if calc == "right_bottle":
@@ -344,6 +396,8 @@ def _bottle_preference_ylabel(calc: str, *, left_bottle: str, right_bottle: str)
 def _bottle_preference_title(calc: str, *, left_bottle: str, right_bottle: str) -> str:
     """Return a readable title for bottle-preference plots."""
 
+    if calc == "all":
+        return "Total bottle consumption"
     if calc == "left_bottle":
         return f"{left_bottle} consumption"
     if calc == "right_bottle":
@@ -351,6 +405,125 @@ def _bottle_preference_title(calc: str, *, left_bottle: str, right_bottle: str) 
     if calc == "left_bottle/right_bottle":
         return f"{left_bottle} / total bottle consumption"
     return f"{right_bottle} / total bottle consumption"
+
+def plot_bottle_preference_day_violin(
+    mouse_day_values: pd.DataFrame,
+    *,
+    output_path: Path,
+    experiment_day: int,
+    left_bottle: str,
+    right_bottle: str,
+    calc: str,
+    stats_table: pd.DataFrame | None = None,
+    dayphase_label: str = "day",
+    figsize_cm: tuple[float, float] | None = None,
+    show_n: bool = True,
+    xtick_rotation: float = 25.0,
+    ylim: tuple[float | None, float | None] | None = None,
+    yticks: list[float] | tuple[float, ...] | np.ndarray | None = None,
+    title: str | None = None,
+    ylabel: str | None = None,
+    reference_line: float | None = None) -> None:
+    """Plot a group violin for one bottle-consumption or preference day."""
+
+    if mouse_day_values.empty:
+        return
+    _prepare_output_path(output_path)
+    panel = mouse_day_values.copy()
+    is_preference = calc in {"left_bottle/right_bottle", "right_bottle/left_bottle"}
+    value_scale = 100.0 if is_preference else 1.0
+    panel["plot_value"] = pd.to_numeric(panel["value"], errors="coerce") * value_scale
+    panel = panel.loc[panel["plot_value"].notna()].copy()
+    if panel.empty:
+        return
+    group_order = _ordered_group_names_from_series(panel["Group"])
+    positions = np.arange(1, len(group_order) + 1)
+    fig, ax = plt.subplots(figsize=_resolve_figsize_cm(VIOLIN_FIGSIZE_CM, figsize_cm))
+
+    violin_data: list[np.ndarray] = []
+    for group_name in group_order:
+        values = panel.loc[panel["Group"].astype(str).eq(group_name), "plot_value"].to_numpy(dtype=float)
+        violin_data.append(values)
+    violins = ax.violinplot(violin_data, positions=positions, widths=0.8, showmeans=False, showmedians=True)
+    for body, group_name in zip(violins["bodies"], group_order):
+        color = _group_color(group_name)
+        body.set_facecolor(color)
+        body.set_edgecolor("none")
+        body.set_linewidth(0.0)
+        body.set_alpha(0.25)
+    for key in ("cbars", "cmins", "cmaxes", "cmedians"):
+        if key in violins:
+            violins[key].set_color("#555555")
+            violins[key].set_linewidth(1.0)
+
+    for position, group_name, values in zip(positions, group_order, violin_data):
+        if len(values) == 0:
+            continue
+        jitter = np.linspace(-0.12, 0.12, len(values)) if len(values) > 1 else np.array([0.0])
+        ax.scatter(
+            np.full(len(values), position) + jitter,
+            values,
+            s=22,
+            color=_group_color(group_name),
+            edgecolor="none",
+            linewidth=0.0,
+            alpha=0.85,
+            zorder=3)
+
+    if is_preference:
+        ax.set_ylim(0.0, 112.0)
+        ax.set_yticks(np.arange(0.0, 101.0, 10.0))
+        ax.set_ylabel(_wrap_axis_label(ylabel or _bottle_preference_ylabel(calc, left_bottle=left_bottle, right_bottle=right_bottle)))
+        default_reference = 50.0
+    else:
+        y_max = float(panel["plot_value"].max())
+        ax.set_ylim(0.0, max(1.2, y_max * 1.25))
+        ax.set_ylabel(_wrap_axis_label(ylabel or _bottle_preference_ylabel(calc, left_bottle=left_bottle, right_bottle=right_bottle)))
+        default_reference = None
+    if reference_line is None:
+        reference_line = default_reference
+    if reference_line is not None:
+        ax.axhline(float(reference_line), color="#4f4f4f", linestyle="--", linewidth=1.0, zorder=1)
+
+    if stats_table is not None and not stats_table.empty and len(group_order) >= 2:
+        significant = stats_table.loc[stats_table["significance"].astype(str).ne("")].copy()
+        if not significant.empty:
+            row = significant.iloc[0]
+            left = 1
+            right = len(group_order)
+            y_min, y_max = ax.get_ylim()
+            y_span = max(1.0, y_max - y_min)
+            line_y = y_min + 0.88 * y_span
+            cap = 0.025 * y_span
+            ax.plot([left, left, right, right], [line_y - cap, line_y, line_y, line_y - cap], color="#444444", linewidth=1.0)
+            ax.text(
+                (left + right) / 2.0,
+                line_y + 0.015 * y_span,
+                str(row["significance"]),
+                ha="center",
+                va="bottom",
+                fontsize=_font_size(1.0),
+                color="#222222",
+                fontweight="bold")
+
+    if ylim is not None:
+        current_ylim = ax.get_ylim()
+        bottom = current_ylim[0] if ylim[0] is None else float(ylim[0])
+        top = current_ylim[1] if ylim[1] is None else float(ylim[1])
+        ax.set_ylim(bottom, top)
+    if yticks is not None:
+        ax.set_yticks(list(yticks))
+    xtick_labels = []
+    for group_name in group_order:
+        n_value = panel.loc[panel["Group"].astype(str).eq(group_name), "ET"].nunique()
+        xtick_labels.append(f"{group_name}\n(n={n_value})" if show_n else group_name)
+    ax.set_xticks(positions)
+    ax.set_xticklabels(xtick_labels, rotation=float(xtick_rotation), ha="right" if xtick_rotation else "center")
+    ax.set_title(_wrap_title(title or f"{_bottle_preference_title(calc, left_bottle=left_bottle, right_bottle=right_bottle)}\nDay {experiment_day}, {dayphase_label}"))
+    ax.grid(False)
+    ax.spines["left"].set_visible(False)
+    ax.spines["bottom"].set_visible(False)
+    _save_figure(fig, output_path)
 
 def _spread_column(spread_metric: str) -> str:
     """Return the summary column name for the selected spread metric."""
@@ -365,6 +538,7 @@ def _add_awake_sleep_background(
     origin_clock_hour: float,
     awake_start_clock_hour: float,
     awake_end_clock_hour: float,
+    axis_unit_factor: float = 1.0,
     label_y: float | None = None,
     day_night_indicator: tuple[str, str] | None = ("awake", "sleep"),
 ) -> None:
@@ -372,33 +546,38 @@ def _add_awake_sleep_background(
 
     if awake_end_clock_hour <= awake_start_clock_hour:
         raise ValueError("Only same-day awake windows are supported.")
+    if axis_unit_factor <= 0:
+        raise ValueError("`axis_unit_factor` must be positive.")
 
     if label_y is None:
         label_y = 0.835
 
+    x_start_hours = float(x_start) * float(axis_unit_factor)
+    x_end_hours = float(x_end) * float(axis_unit_factor)
     awake_duration = awake_end_clock_hour - awake_start_clock_hour
     awake_shift = (awake_start_clock_hour - origin_clock_hour) % 24.0
-    interval_indices = range(-2, int(np.ceil((x_end - x_start) / 24.0)) + 3)
+    first_interval = int(np.floor((x_start_hours - awake_shift - awake_duration) / 24.0)) - 1
+    last_interval = int(np.ceil((x_end_hours - awake_shift) / 24.0)) + 1
+    interval_indices = range(first_interval, last_interval + 1)
     awake_intervals: list[tuple[float, float]] = []
     for index in interval_indices:
         awake_left = awake_shift + 24.0 * index
         awake_right = awake_left + awake_duration
-        if awake_right <= x_start or awake_left >= x_end:
+        if awake_right <= x_start_hours or awake_left >= x_end_hours:
             continue
         awake_intervals.append((awake_left, awake_right))
     awake_intervals.sort()
 
-    total_range = x_end - x_start
     label_font_size = _font_size(-2.0)
-    min_label_width = 5.5
+    min_label_width = 5.5 / float(axis_unit_factor)
     awake_label = ""
     sleep_label = ""
     if day_night_indicator is not None:
         awake_label = str(day_night_indicator[0])
         sleep_label = str(day_night_indicator[1])
     for awake_left, awake_right in awake_intervals:
-        draw_awake_left = max(awake_left, x_start)
-        draw_awake_right = min(awake_right, x_end)
+        draw_awake_left = max(awake_left, x_start_hours) / float(axis_unit_factor)
+        draw_awake_right = min(awake_right, x_end_hours) / float(axis_unit_factor)
         if awake_label and draw_awake_right - draw_awake_left >= min_label_width:
             ax.text(
                 draw_awake_left + (draw_awake_right - draw_awake_left) / 2.0,
@@ -410,21 +589,22 @@ def _add_awake_sleep_background(
                 color="#4d4d4d",
                 transform=ax.get_xaxis_transform())
 
-    current_left = x_start
+    current_left = x_start_hours
     for awake_left, awake_right in awake_intervals:
         draw_sleep_left = current_left
-        draw_sleep_right = min(max(awake_left, x_start), x_end)
+        draw_sleep_right = min(max(awake_left, x_start_hours), x_end_hours)
         if draw_sleep_right > draw_sleep_left:
             ax.axvspan(
-                draw_sleep_left,
-                draw_sleep_right,
+                draw_sleep_left / float(axis_unit_factor),
+                draw_sleep_right / float(axis_unit_factor),
                 color=DEFAULT_SLEEP_SHADE_COLOR,
                 alpha=0.55,
                 linewidth=0,
                 zorder=0)
-            if sleep_label and draw_sleep_right - draw_sleep_left >= min_label_width:
+            draw_sleep_width = (draw_sleep_right - draw_sleep_left) / float(axis_unit_factor)
+            if sleep_label and draw_sleep_width >= min_label_width:
                 ax.text(
-                    draw_sleep_left + (draw_sleep_right - draw_sleep_left) / 2.0,
+                    (draw_sleep_left + (draw_sleep_right - draw_sleep_left) / 2.0) / float(axis_unit_factor),
                     label_y,
                     sleep_label,
                     ha="center",
@@ -432,19 +612,20 @@ def _add_awake_sleep_background(
                     fontsize=label_font_size,
                     color="#4d4d4d",
                     transform=ax.get_xaxis_transform())
-        current_left = max(current_left, min(awake_right, x_end))
+        current_left = max(current_left, min(awake_right, x_end_hours))
 
-    if current_left < x_end:
+    if current_left < x_end_hours:
         ax.axvspan(
-            current_left,
-            x_end,
+            current_left / float(axis_unit_factor),
+            x_end_hours / float(axis_unit_factor),
             color=DEFAULT_SLEEP_SHADE_COLOR,
             alpha=0.55,
             linewidth=0,
             zorder=0)
-        if sleep_label and x_end - current_left >= min_label_width:
+        draw_sleep_width = (x_end_hours - current_left) / float(axis_unit_factor)
+        if sleep_label and draw_sleep_width >= min_label_width:
             ax.text(
-                current_left + (x_end - current_left) / 2.0,
+                (current_left + (x_end_hours - current_left) / 2.0) / float(axis_unit_factor),
                 label_y,
                 sleep_label,
                 ha="center",
@@ -463,14 +644,15 @@ def _apply_axis_overrides(
     xlabel: str | None = None,
     ylabel: str | None = None,
     title: str | None = None,
-) -> None:
+    ) -> None:
     """Apply explicit user axis overrides after plot defaults."""
 
+    resolved_xlim = None
     if xlim is not None:
         current_xlim = ax.get_xlim()
         left = current_xlim[0] if xlim[0] is None else float(xlim[0])
         right = current_xlim[1] if xlim[1] is None else float(xlim[1])
-        ax.set_xlim(left, right)
+        resolved_xlim = (left, right)
     if ylim is not None:
         current_ylim = ax.get_ylim()
         bottom = current_ylim[0] if ylim[0] is None else float(ylim[0])
@@ -486,6 +668,8 @@ def _apply_axis_overrides(
         ax.set_ylabel(_wrap_axis_label(ylabel))
     if title is not None:
         ax.set_title(_wrap_title(title))
+    if resolved_xlim is not None:
+        ax.set_xlim(resolved_xlim)
 
 def _add_day_annotations(
     ax: plt.Axes,
@@ -917,6 +1101,9 @@ def plot_experiment_overview(
 
     max_hour = float(group_summary["bin_end_hours"].max()) if x_end_hours is None else float(x_end_hours)
     x_start = _phase_plot_x_start(origin_clock_hour, awake_start_clock_hour)
+    visible_x_start = x_start if xlim is None or xlim[0] is None else float(xlim[0])
+    visible_x_end = max_hour if xlim is None or xlim[1] is None else float(xlim[1])
+    starting_day = int(np.floor(visible_x_start / 24.0))
     ax.set_xlim(x_start, max_hour)
     y_max = max(
         float(group_mouse["value"].max()) if not group_mouse.empty else 0.0,
@@ -924,13 +1111,19 @@ def plot_experiment_overview(
     ax.set_ylim(0, _count_axis_upper(y_max))
     _add_awake_sleep_background(
         ax,
-        x_end=max_hour,
-        x_start=0.0,
+        x_end=visible_x_end,
+        x_start=visible_x_start,
         origin_clock_hour=origin_clock_hour,
         awake_start_clock_hour=awake_start_clock_hour,
         awake_end_clock_hour=awake_end_clock_hour,
         day_night_indicator=day_night_indicator)
-    _add_day_annotations(ax, x_end=max_hour, x_start=0.0, label_every_days=1, starting_day=0, min_label_width_hours=12.0)
+    _add_day_annotations(
+        ax,
+        x_end=visible_x_end,
+        x_start=visible_x_start,
+        label_every_days=1,
+        starting_day=starting_day,
+        min_label_width_hours=12.0)
     _add_phase_band(ax, phase_window_table, phase_display_names=phase_display_names)
 
     ax.set_title(_wrap_title(f"{group_name}: {_title_start(title_label)}; bin={bin_hours} h"))
@@ -995,19 +1188,28 @@ def plot_experiment_overview_groups(
     fig, ax = plt.subplots(figsize=_figsize_cm(*WIDE_GROUP_FIGSIZE_CM))
     max_hour = float(summary_bins["bin_end_hours"].max()) if x_end_hours is None else float(x_end_hours)
     x_start = _phase_plot_x_start(origin_clock_hour, awake_start_clock_hour)
+    visible_x_start = x_start if xlim is None or xlim[0] is None else float(xlim[0])
+    visible_x_end = max_hour if xlim is None or xlim[1] is None else float(xlim[1])
+    starting_day = int(np.floor(visible_x_start / 24.0))
     ax.set_xlim(x_start, max_hour)
     y_max = float((summary_bins["mean_value"] + summary_bins[spread_col]).max())
     ax.set_ylim(0, _count_axis_upper(y_max))
 
     _add_awake_sleep_background(
         ax,
-        x_end=max_hour,
-        x_start=0.0,
+        x_end=visible_x_end,
+        x_start=visible_x_start,
         origin_clock_hour=origin_clock_hour,
         awake_start_clock_hour=awake_start_clock_hour,
         awake_end_clock_hour=awake_end_clock_hour,
         day_night_indicator=day_night_indicator)
-    _add_day_annotations(ax, x_end=max_hour, x_start=0.0, label_every_days=1, starting_day=0, min_label_width_hours=12.0)
+    _add_day_annotations(
+        ax,
+        x_end=visible_x_end,
+        x_start=visible_x_start,
+        label_every_days=1,
+        starting_day=starting_day,
+        min_label_width_hours=12.0)
     _add_phase_band(ax, phase_window_table, phase_display_names=phase_display_names)
 
     for group_name, group_summary in summary_bins.groupby("Group", observed=True):
@@ -1127,7 +1329,7 @@ def plot_phase2_adaptation(
             width=width,
             color="#cfcfcf",
             edgecolor="#7f7f7f",
-            yerr=visits_group["sem_value"],
+            yerr=visits_group[spread_col],
             capsize=2,
             label="Visits",
             zorder=3)
@@ -1137,7 +1339,7 @@ def plot_phase2_adaptation(
             width=width,
             color=DRINKING_VISIT_COLOR,
             edgecolor=DRINKING_VISIT_COLOR,
-            yerr=secondary_group["sem_value"],
+            yerr=secondary_group[spread_col],
             capsize=2,
             label=secondary_label,
             alpha=0.88,
@@ -1648,6 +1850,8 @@ def plot_experiment_dual_metric_bars(
     primary_summary: pd.DataFrame,
     secondary_summary: pd.DataFrame,
     *,
+    primary_mouse: pd.DataFrame | None = None,
+    secondary_mouse: pd.DataFrame | None = None,
     group_name: str,
     bin_hours: int,
     output_path: Path,
@@ -1670,6 +1874,7 @@ def plot_experiment_dual_metric_bars(
     ylabel: str | None = None,
     title_label: str | None = None,
     day_night_indicator: tuple[str, str] | None = ("awake", "sleep"),
+    single_group_display: str = "spread",
 ) -> None:
     """Plot paired dual-metric summaries across the full experiment timeline."""
 
@@ -1683,6 +1888,10 @@ def plot_experiment_dual_metric_bars(
     fig, ax = plt.subplots(figsize=_figsize_cm(*LONG_FIGSIZE_2_CM))
     spread_col = _spread_column(spread_metric)
     max_hour = float(visits_group["bin_end_hours"].max())
+    x_start = 0.0
+    visible_x_start = x_start if xlim is None or xlim[0] is None else float(xlim[0])
+    visible_x_end = max_hour if xlim is None or xlim[1] is None else float(xlim[1])
+    starting_day = int(np.floor(visible_x_start / 24.0))
     ax.set_xlim(0, max_hour)
     y_max = max(
         float((visits_group["mean_value"] + visits_group[spread_col]).max()),
@@ -1691,34 +1900,78 @@ def plot_experiment_dual_metric_bars(
 
     _add_awake_sleep_background(
         ax,
-        x_end=max_hour,
-        x_start=0.0,
+        x_end=visible_x_end,
+        x_start=visible_x_start,
         origin_clock_hour=origin_clock_hour,
         awake_start_clock_hour=awake_start_clock_hour,
         awake_end_clock_hour=awake_end_clock_hour,
         day_night_indicator=day_night_indicator)
-    _add_day_annotations(ax, x_end=max_hour, x_start=0.0, label_every_days=1, starting_day=0, min_label_width_hours=12.0)
+    _add_day_annotations(
+        ax,
+        x_end=visible_x_end,
+        x_start=visible_x_start,
+        label_every_days=1,
+        starting_day=starting_day,
+        min_label_width_hours=12.0)
     _add_phase_band(ax, phase_window_table, phase_display_names=phase_display_names)
 
     if plot_style == "line":
-        _draw_trace_with_band(
-            ax,
-            visits_group,
-            y_col="mean_value",
-            spread_col=spread_col,
-            color="#7f7f7f",
-            label="Visits",
-            plot_style="line",
-            linewidth=1.0)
-        _draw_trace_with_band(
-            ax,
-            secondary_group,
-            y_col="mean_value",
-            spread_col=spread_col,
-            color=DRINKING_VISIT_COLOR,
-            label=secondary_label,
-            plot_style="line",
-            linewidth=1.0)
+        if single_group_display == "individual":
+            primary_group_mouse = pd.DataFrame() if primary_mouse is None else primary_mouse.loc[primary_mouse["Group"].astype(str).eq(group_name)].copy()
+            secondary_group_mouse = pd.DataFrame() if secondary_mouse is None else secondary_mouse.loc[secondary_mouse["Group"].astype(str).eq(group_name)].copy()
+            for _, mouse_data in primary_group_mouse.groupby("ETLabel", observed=True):
+                _draw_individual_trace(
+                    ax,
+                    mouse_data,
+                    y_col="value",
+                    color="#7f7f7f",
+                    plot_style="line",
+                    linewidth=0.55,
+                    alpha=0.25)
+            for _, mouse_data in secondary_group_mouse.groupby("ETLabel", observed=True):
+                _draw_individual_trace(
+                    ax,
+                    mouse_data,
+                    y_col="value",
+                    color=DRINKING_VISIT_COLOR,
+                    plot_style="line",
+                    linewidth=0.55,
+                    alpha=0.25)
+            ax.plot(
+                visits_group["bin_center_hours"],
+                visits_group["mean_value"],
+                color="#7f7f7f",
+                linestyle="-",
+                linewidth=1.5,
+                label="Visits",
+                zorder=5)
+            ax.plot(
+                secondary_group["bin_center_hours"],
+                secondary_group["mean_value"],
+                color=DRINKING_VISIT_COLOR,
+                linestyle="--",
+                linewidth=1.5,
+                label=secondary_label,
+                zorder=6)
+        else:
+            _draw_trace_with_band(
+                ax,
+                visits_group,
+                y_col="mean_value",
+                spread_col=spread_col,
+                color="#7f7f7f",
+                label="Visits",
+                plot_style="line",
+                linewidth=1.0)
+            _draw_trace_with_band(
+                ax,
+                secondary_group,
+                y_col="mean_value",
+                spread_col=spread_col,
+                color=DRINKING_VISIT_COLOR,
+                label=secondary_label,
+                plot_style="line",
+                linewidth=1.0)
     else:
         width = float(bin_hours) * 0.42
         x = visits_group["bin_center_hours"]
@@ -1781,48 +2034,76 @@ def plot_experiment_dual_metric_groups(
     ylabel: str | None = None,
     title_label: str | None = None,
     day_night_indicator: tuple[str, str] | None = ("awake", "sleep"),
+    show_all_visits: bool = True,
+    show_all_groups_sem: bool = False,
+    spread_metric: str = "sem",
 ) -> None:
     """Plot all-groups full-experiment dual metrics with reduced legend semantics."""
 
-    if primary_summary.empty or secondary_summary.empty:
+    if secondary_summary.empty or (show_all_visits and primary_summary.empty):
         return
 
     available_groups = [
         group_name
         for group_name in group_names
-        if group_name in set(primary_summary["Group"].astype(str))
-        and group_name in set(secondary_summary["Group"].astype(str))]
+        if group_name in set(secondary_summary["Group"].astype(str))
+        and (not show_all_visits or group_name in set(primary_summary["Group"].astype(str)))]
     if not available_groups:
         return
 
     _prepare_output_path(output_path)
     fig, ax = plt.subplots(figsize=_figsize_cm(*LONG_FIGSIZE_2_CM))
-    max_hour = float(max(primary_summary["bin_end_hours"].max(), secondary_summary["bin_end_hours"].max()))
-    spread_col = "sem_value"
+    max_hour = float(secondary_summary["bin_end_hours"].max())
+    if show_all_visits:
+        max_hour = float(max(primary_summary["bin_end_hours"].max(), max_hour))
+    x_start = 0.0
+    visible_x_start = x_start if xlim is None or xlim[0] is None else float(xlim[0])
+    visible_x_end = max_hour if xlim is None or xlim[1] is None else float(xlim[1])
+    starting_day = int(np.floor(visible_x_start / 24.0))
+    spread_col = _spread_column(spread_metric)
     y_max = 0.0
     for group_name in available_groups:
-        primary_group = primary_summary.loc[primary_summary["Group"].astype(str).eq(group_name)].copy()
+        primary_group = primary_summary.loc[primary_summary["Group"].astype(str).eq(group_name)].copy() if show_all_visits else pd.DataFrame()
         secondary_group = secondary_summary.loc[secondary_summary["Group"].astype(str).eq(group_name)].copy()
-        if primary_group.empty or secondary_group.empty:
+        if secondary_group.empty or (show_all_visits and primary_group.empty):
             continue
-        y_max = max(
-            y_max,
-            float((primary_group["mean_value"] + primary_group[spread_col]).max()),
-            float((secondary_group["mean_value"] + secondary_group[spread_col]).max()))
+        y_candidates = [float((secondary_group["mean_value"] + secondary_group[spread_col]).max())]
+        if show_all_visits:
+            y_candidates.append(float((primary_group["mean_value"] + primary_group[spread_col]).max()))
+        y_max = max(y_max, *y_candidates)
         group_color = _group_color(group_name)
-        ax.plot(
-            primary_group["bin_center_hours"],
-            primary_group["mean_value"],
-            color=group_color,
-            linestyle="--",
-            linewidth=1.0,
-            alpha=0.8,
-            zorder=3)
+        if show_all_visits:
+            if show_all_groups_sem:
+                ax.fill_between(
+                    primary_group["bin_center_hours"],
+                    primary_group["mean_value"] - primary_group[spread_col],
+                    primary_group["mean_value"] + primary_group[spread_col],
+                    color=group_color,
+                    alpha=0.12,
+                    linewidth=0,
+                    zorder=2)
+            ax.plot(
+                primary_group["bin_center_hours"],
+                primary_group["mean_value"],
+                color=group_color,
+                linestyle="-",
+                linewidth=1.0,
+                alpha=0.8,
+                zorder=3)
+        if show_all_groups_sem:
+            ax.fill_between(
+                secondary_group["bin_center_hours"],
+                secondary_group["mean_value"] - secondary_group[spread_col],
+                secondary_group["mean_value"] + secondary_group[spread_col],
+                color=group_color,
+                alpha=0.12,
+                linewidth=0,
+                zorder=2)
         ax.plot(
             secondary_group["bin_center_hours"],
             secondary_group["mean_value"],
             color=group_color,
-            linestyle="-",
+            linestyle="--" if show_all_visits else "-",
             linewidth=1.0,
             alpha=0.95,
             zorder=4)
@@ -1831,16 +2112,26 @@ def plot_experiment_dual_metric_groups(
     ax.set_ylim(0, _count_axis_upper(y_max))
     _add_awake_sleep_background(
         ax,
-        x_end=max_hour,
-        x_start=0.0,
+        x_end=visible_x_end,
+        x_start=visible_x_start,
         origin_clock_hour=origin_clock_hour,
         awake_start_clock_hour=awake_start_clock_hour,
         awake_end_clock_hour=awake_end_clock_hour,
         day_night_indicator=day_night_indicator)
-    _add_day_annotations(ax, x_end=max_hour, x_start=0.0, label_every_days=1, starting_day=0, min_label_width_hours=12.0)
+    _add_day_annotations(
+        ax,
+        x_end=visible_x_end,
+        x_start=visible_x_start,
+        label_every_days=1,
+        starting_day=starting_day,
+        min_label_width_hours=12.0)
     _add_phase_band(ax, phase_window_table, phase_display_names=phase_display_names)
 
-    ax.set_title(_wrap_title(title_label or f"Visits vs {secondary_label.lower()} across selected phases by group ({bin_hours} h bins)"))
+    default_title = (
+        f"Visits vs {secondary_label.lower()} across selected phases by group ({bin_hours} h bins)"
+        if show_all_visits
+        else f"{secondary_label} across selected phases by group ({bin_hours} h bins)")
+    ax.set_title(_wrap_title(title_label or default_title))
     ax.set_xlabel(xlabel or "Elapsed experimental time [hours]")
     ax.set_ylabel(_wrap_axis_label(ylabel or "Mean count per mouse and bin"))
     _apply_axis_overrides(ax, xlim=xlim, ylim=ylim, xticks=xticks, yticks=yticks)
@@ -1849,11 +2140,12 @@ def plot_experiment_dual_metric_groups(
     legend_handles = [
         Line2D([0], [0], color=_group_color(group_name), linestyle="-", linewidth=1.2, label=group_name)
         for group_name in available_groups]
-    legend_handles.extend(
-        [
-            Line2D([0], [0], color="#000000", linestyle="--", linewidth=1.2, label="All visits"),
-            Line2D([0], [0], color="#000000", linestyle="-", linewidth=1.2, label=secondary_label),
-        ])
+    if show_all_visits:
+        legend_handles.extend(
+            [
+                Line2D([0], [0], color="#000000", linestyle="-", linewidth=1.2, label="All visits"),
+                Line2D([0], [0], color="#000000", linestyle="--", linewidth=1.2, label=secondary_label),
+            ])
     if show_legend:
         _draw_legend(
             ax,
@@ -2054,6 +2346,7 @@ def plot_group_day_violin(
     value_scale: float = 100.0,
     format_as_percent: bool = True,
     y_limits: tuple[float | None, float | None] | None = None,
+    stats_bracket_drop: float | None = None,
 ) -> None:
     """Plot one day-wise group violin panel with significance annotations."""
 
@@ -2142,12 +2435,16 @@ def plot_group_day_violin(
     y_base = max((104.0 if format_as_percent else y_data_max * 1.05), y_data_max + (5.0 if format_as_percent else max(0.1, y_data_max * 0.08)))
     y_step = 10.0 if format_as_percent else max(0.12, y_data_max * 0.10)
     y_limit = 124.0 if format_as_percent else max(1.25, y_base + 0.4)
+    bracket_drop = (
+        float(stats_bracket_drop)
+        if stats_bracket_drop is not None
+        else (1.1 if format_as_percent else max(0.025, y_step * 0.25)))
     for pair_index, (_, row) in enumerate(significant_pairs.iterrows()):
         left = group_order.index(str(row["group1"])) + 1
         right = group_order.index(str(row["group2"])) + 1
         line_y = y_base + pair_index * y_step
-        y_limit = max(y_limit, line_y + 7.0)
-        ax.plot([left, left, right, right], [line_y - 1.1, line_y, line_y, line_y - 1.1], color="#444444", linewidth=1.0)
+        y_limit = max(y_limit, line_y + (7.0 if format_as_percent else max(0.08, y_step * 0.60)))
+        ax.plot([left, left, right, right], [line_y - bracket_drop, line_y, line_y, line_y - bracket_drop], color="#444444", linewidth=1.0)
         ax.text(
             (left + right) / 2.0,
             line_y + (1.8 if format_as_percent else max(0.04, y_step * 0.18)),
@@ -2485,6 +2782,8 @@ def plot_phase_activity_boxplot(
     legend_font_size: float | None = None,
     show_n: bool = True,
     xtick_rotation: float = 45.0,
+    median_line_width: float = 1.2,
+    median_marker_size: float = 4.0,
     ylim: tuple[float, float] | None = None,
     yticks: list[float] | tuple[float, ...] | np.ndarray | None = None,
 ) -> None:
@@ -2522,6 +2821,7 @@ def plot_phase_activity_boxplot(
         for offset, phase_number in zip(offsets, phase_numbers):
             position = group_center + float(offset)
             positions[(group_name, int(phase_number))] = position
+            group_color = _group_color(group_name)
             values = mouse_phase_activity.loc[
                 mouse_phase_activity["Group"].astype(str).eq(group_name)
                 & mouse_phase_activity["PhaseNumber"].eq(int(phase_number)),
@@ -2534,7 +2834,7 @@ def plot_phase_activity_boxplot(
                 widths=box_width,
                 patch_artist=True,
                 showfliers=True,
-                medianprops={"color": "#ff5a36", "linewidth": 2.3},
+                medianprops={"color": group_color, "linewidth": float(median_line_width)},
                 whiskerprops={"color": "#555555", "linewidth": 1.0, "linestyle": "--"},
                 capprops={"color": "#555555", "linewidth": 1.0},
                 boxprops={"linewidth": 1.1})
@@ -2544,15 +2844,22 @@ def plot_phase_activity_boxplot(
                 patch.set_alpha(0.95)
             for flier in box["fliers"]:
                 flier.set_marker("o")
-                flier.set_markersize(6.5)
+                flier.set_markersize(max(1.5, float(median_marker_size) * 0.75))
                 flier.set_markerfacecolor("white")
                 flier.set_markeredgecolor("black")
-                flier.set_markeredgewidth(1.2)
+                flier.set_markeredgewidth(max(0.5, float(median_line_width) * 0.75))
             medians_x.append(position)
             medians_y.append(float(np.median(values)))
 
         if medians_x:
-            ax.plot(medians_x, medians_y, color="red", marker="o", linewidth=2.1, label="Median" if group_index == 1 else None)
+            ax.plot(
+                medians_x,
+                medians_y,
+                color=_group_color(group_name),
+                marker="o",
+                markersize=float(median_marker_size),
+                linewidth=float(median_line_width),
+                label="Phase summary" if group_index == 1 else None)
 
     y_min = max(0.0, float(mouse_phase_activity[value_col].min()) - 0.5)
     data_max = float(mouse_phase_activity[value_col].max())
@@ -2560,6 +2867,8 @@ def plot_phase_activity_boxplot(
     y_max = data_max + data_span * 0.25
     ax.set_ylim(y_min, y_max)
 
+    significant_rows = []
+    annotation_y = data_max + data_span * 0.12
     for _, row in stats_table.iterrows():
         group_name = str(row["Group"])
         phase_number = int(row["PhaseNumber"])
@@ -2569,14 +2878,19 @@ def plot_phase_activity_boxplot(
         position = positions.get((group_name, phase_number))
         if position is None:
             continue
-        values = mouse_phase_activity.loc[
-            mouse_phase_activity["Group"].astype(str).eq(group_name)
-            & mouse_phase_activity["PhaseNumber"].eq(phase_number),
-            value_col].dropna()
-        local_top = float(values.max()) if not values.empty else y_min
-        annotation_y = local_top + data_span * 0.06
-        y_max = max(y_max, annotation_y + data_span * 0.10)
-        ax.text(position, annotation_y, label, color="red", fontsize=_font_size(0.0), ha="center", va="bottom", fontweight="bold")
+        significant_rows.append((position, label))
+    if significant_rows:
+        y_max = max(y_max, annotation_y + data_span * 0.14)
+        for position, label in significant_rows:
+            ax.text(
+                position,
+                annotation_y,
+                label,
+                color="#222222",
+                fontsize=_font_size(0.0),
+                ha="center",
+                va="bottom",
+                fontweight="bold")
     ax.set_ylim(y_min, y_max)
 
     xticks: list[float] = []
@@ -2593,15 +2907,23 @@ def plot_phase_activity_boxplot(
     _apply_axis_overrides(ax, ylim=ylim, yticks=yticks)
     ax.grid(axis="y", alpha=0.22)
 
-    median_handle = plt.Line2D([0], [0], color="red", marker="o", linewidth=2.1, label="Median")
+    median_handle = plt.Line2D(
+        [0],
+        [0],
+        color="#444444",
+        marker="o",
+        markersize=float(median_marker_size),
+        linewidth=float(median_line_width),
+        label="Phase summary")
     outlier_handle = plt.Line2D(
         [0],
         [0],
         color="black",
         marker="o",
         linestyle="None",
+        markersize=max(1.5, float(median_marker_size) * 0.75),
         markerfacecolor="white",
-        markeredgewidth=1.2,
+        markeredgewidth=max(0.5, float(median_line_width) * 0.75),
         label="Outlier")
     if show_legend:
         _draw_legend(

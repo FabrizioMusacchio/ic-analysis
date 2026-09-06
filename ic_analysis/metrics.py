@@ -250,12 +250,14 @@ def _build_complete_mouse_bin_frame(
     mice: pd.DataFrame,
     max_time: float,
     bin_hours: int,
+    min_time: float = 0.0,
 ) -> pd.DataFrame:
     """Create the full mouse-by-bin grid for count or rate tables."""
 
+    min_bin_start = float(np.floor(float(min_time) / float(bin_hours)) * float(bin_hours))
     max_bin_start = float(np.floor(max_time / float(bin_hours)) * float(bin_hours))
     all_bins = pd.DataFrame(
-        {"bin_start_hours": np.arange(0.0, max_bin_start + float(bin_hours), float(bin_hours))}
+        {"bin_start_hours": np.arange(min_bin_start, max_bin_start + float(bin_hours), float(bin_hours))}
     )
     all_bins["bin_start_hours"] = all_bins["bin_start_hours"].round(8)
     mice = mice.copy()
@@ -285,7 +287,11 @@ def _prepare_count_bins(
         .sum()
         .reset_index(name="value"))
     mice = work.loc[:, ["Group", "ET", "ETLabel", "SEX"]].drop_duplicates().reset_index(drop=True)
-    full_index = _build_complete_mouse_bin_frame(mice, float(work[time_col].max()), bin_hours)
+    full_index = _build_complete_mouse_bin_frame(
+        mice,
+        float(work[time_col].max()),
+        bin_hours,
+        min_time=float(work[time_col].min()))
     mouse_bins = full_index.merge(
         mouse_counts,
         on=["Group", "ET", "ETLabel", "SEX", "bin_start_hours"],
@@ -322,7 +328,11 @@ def _prepare_rate_bins(
     grouped["value"] = grouped["correct_visits"] / grouped["all_visits"]
 
     mice = work.loc[:, ["Group", "ET", "ETLabel", "SEX"]].drop_duplicates().reset_index(drop=True)
-    full_index = _build_complete_mouse_bin_frame(mice, float(work[time_col].max()), bin_hours)
+    full_index = _build_complete_mouse_bin_frame(
+        mice,
+        float(work[time_col].max()),
+        bin_hours,
+        min_time=float(work[time_col].min()))
     mouse_bins = full_index.merge(
         grouped,
         on=["Group", "ET", "ETLabel", "SEX", "bin_start_hours"],
@@ -445,7 +455,11 @@ def compute_bottle_preference_bins(
         if column not in pivot.columns:
             pivot[column] = 0.0
     mice = data.loc[:, ["Group", "ET", "ETLabel", "SEX"]].drop_duplicates().reset_index(drop=True)
-    full_index = _build_complete_mouse_bin_frame(mice, float(data["analysis_experiment_elapsed_hours"].max()), float(bin_h))
+    full_index = _build_complete_mouse_bin_frame(
+        mice,
+        float(data["analysis_experiment_elapsed_hours"].max()),
+        float(bin_h),
+        min_time=float(data["analysis_experiment_elapsed_hours"].min()))
     mouse_bins = full_index.merge(
         pivot,
         on=["Group", "ET", "ETLabel", "SEX", "bin_start_hours"],
@@ -456,8 +470,12 @@ def compute_bottle_preference_bins(
     mouse_bins["left_bottle_consumption"] = mouse_bins["left"]
     mouse_bins["right_bottle_consumption"] = mouse_bins["right"]
     mouse_bins["total_bottle_consumption"] = mouse_bins["left"] + mouse_bins["right"]
+    mouse_bins["bin_end_hours"] = mouse_bins["bin_start_hours"] + float(bin_h)
+    mouse_bins["bin_center_hours"] = mouse_bins["bin_start_hours"] + float(bin_h) / 2.0
     denominator = mouse_bins["total_bottle_consumption"].replace(0.0, np.nan)
-    if calc == "left_bottle":
+    if calc == "all":
+        mouse_bins["value"] = mouse_bins["total_bottle_consumption"]
+    elif calc == "left_bottle":
         mouse_bins["value"] = mouse_bins["left_bottle_consumption"]
     elif calc == "right_bottle":
         mouse_bins["value"] = mouse_bins["right_bottle_consumption"]
@@ -467,12 +485,130 @@ def compute_bottle_preference_bins(
         mouse_bins["value"] = mouse_bins["right_bottle_consumption"] / denominator
     else:
         raise ValueError(
-            "`calc` must be one of 'left_bottle', 'right_bottle', "
+            "`calc` must be one of 'all', 'left_bottle', 'right_bottle', "
             "'left_bottle/right_bottle', or 'right_bottle/left_bottle'.")
     summary = _summarize_mouse_values(mouse_bins)
     summary["bin_end_hours"] = summary["bin_start_hours"] + float(bin_h)
     summary["bin_center_hours"] = summary["bin_start_hours"] + float(bin_h) / 2.0
     return mouse_bins, summary
+
+def compute_binned_group_statistics(
+    mouse_bins: pd.DataFrame,
+    *,
+    value_col: str = "value",
+    group_col: str = "Group",
+    bin_col: str = "bin_start_hours",
+    normality_alpha: float = 0.05,
+    alpha: float = 0.05) -> pd.DataFrame:
+    """Compute bin-wise group statistics on mouse-level values.
+
+    Two-group bins are tested with Welch's t-test when both groups are
+    compatible with normality by Shapiro-Wilk tests; otherwise Mann-Whitney U
+    is used. Bins with more than two groups use one-way ANOVA for normally
+    distributed groups and Kruskal-Wallis otherwise.
+    """
+
+    required_columns = {value_col, group_col, bin_col}
+    missing = sorted(required_columns.difference(mouse_bins.columns))
+    if missing:
+        raise ValueError(f"Binned group statistics require missing column(s): {missing}")
+    records: list[dict[str, object]] = []
+    for bin_start, bin_data in mouse_bins.groupby(bin_col, observed=True):
+        groups = []
+        normality_p_values: dict[str, float] = {}
+        sample_sizes: dict[str, int] = {}
+        for group_name, group_data in bin_data.groupby(group_col, observed=True):
+            values = pd.to_numeric(group_data[value_col], errors="coerce").dropna().astype(float)
+            if values.empty:
+                continue
+            group_label = str(group_name)
+            groups.append((group_label, values.to_numpy()))
+            sample_sizes[group_label] = int(values.size)
+            if values.size >= 3 and values.nunique() > 1:
+                normality_p_values[group_label] = float(stats.shapiro(values).pvalue)
+            elif values.size >= 3:
+                normality_p_values[group_label] = 1.0
+            else:
+                normality_p_values[group_label] = np.nan
+        if len(groups) < 2:
+            records.append(_empty_bin_stat_record(bin_start, sample_sizes=sample_sizes))
+            continue
+        all_normal = all(
+            np.isfinite(p_value) and p_value >= normality_alpha
+            for p_value in normality_p_values.values())
+        if len(groups) == 2:
+            (group_1, values_1), (group_2, values_2) = groups
+            if all_normal and len(values_1) >= 3 and len(values_2) >= 3:
+                result = stats.ttest_ind(values_1, values_2, equal_var=False, nan_policy="omit")
+                method = "Welch t-test"
+            else:
+                result = stats.mannwhitneyu(values_1, values_2, alternative="two-sided")
+                method = "Mann-Whitney U"
+            statistic = float(result.statistic)
+            p_value = float(result.pvalue)
+            group_comparison = f"{group_1} vs {group_2}"
+        else:
+            arrays = [values for _, values in groups]
+            if all_normal and all(len(values) >= 3 for values in arrays):
+                result = stats.f_oneway(*arrays)
+                method = "one-way ANOVA"
+            else:
+                result = stats.kruskal(*arrays)
+                method = "Kruskal-Wallis"
+            statistic = float(result.statistic)
+            p_value = float(result.pvalue)
+            group_comparison = "omnibus"
+        records.append({
+            "bin_start_hours": float(bin_start),
+            "bin_center_hours": _bin_center_for_stat(bin_data, bin_col),
+            "test": method,
+            "comparison": group_comparison,
+            "statistic": statistic,
+            "p_value": p_value,
+            "alpha": float(alpha),
+            "significance": _p_value_stars(p_value, alpha=alpha),
+            "group_count": len(groups),
+            "sample_sizes": "; ".join(f"{group}: n={n}" for group, n in sample_sizes.items()),
+            "normality_p_values": "; ".join(
+                f"{group}: p={p_value:.4g}" if np.isfinite(p_value) else f"{group}: p=NA"
+                for group, p_value in normality_p_values.items())})
+    return pd.DataFrame.from_records(records)
+
+def _empty_bin_stat_record(bin_start: object, *, sample_sizes: dict[str, int]) -> dict[str, object]:
+    """Return an empty statistics row for bins with fewer than two groups."""
+
+    return {
+        "bin_start_hours": float(bin_start),
+        "bin_center_hours": float(bin_start),
+        "test": "not tested",
+        "comparison": "",
+        "statistic": np.nan,
+        "p_value": np.nan,
+        "alpha": 0.05,
+        "significance": "",
+        "group_count": len(sample_sizes),
+        "sample_sizes": "; ".join(f"{group}: n={n}" for group, n in sample_sizes.items()),
+        "normality_p_values": ""}
+
+def _bin_center_for_stat(bin_data: pd.DataFrame, bin_col: str) -> float:
+    """Return the bin center if present, otherwise the bin start."""
+
+    if "bin_center_hours" in bin_data.columns:
+        values = pd.to_numeric(bin_data["bin_center_hours"], errors="coerce").dropna()
+        if not values.empty:
+            return float(values.iloc[0])
+    return float(pd.to_numeric(bin_data[bin_col], errors="coerce").dropna().iloc[0])
+
+def _p_value_stars(p_value: float, *, alpha: float = 0.05) -> str:
+    """Return star notation for a p-value."""
+
+    if not np.isfinite(p_value) or p_value >= alpha:
+        return ""
+    if p_value < 0.001:
+        return "***"
+    if p_value < 0.01:
+        return "**"
+    return "*"
 
 def compute_phase2_adaptation_bins(
     visits: pd.DataFrame,
