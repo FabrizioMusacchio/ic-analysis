@@ -9,22 +9,46 @@ purposes.
 
 <!-- ---
 
-## 🔜 IntelliCage Analysis Toolkit v0.1.1 UPCOMING RELEASE
+## 🔜 IntelliCage Analysis Toolkit v0.1.2 UPCOMING RELEASE
+
+-->
+
+## 🚀 IntelliCage Analysis Toolkit v0.1.1
+
+This release improves the display controls for several functions and also corrects
+a timeline creation bug introduced in v0.1.0 that affected phase-subset plots. We
+therefore recommend to upgrade to this release if you are using v0.1.0.
+
+### ✨ Features
+
+- Added additional display controls to `.plot_NP_adaptation()`: `show_all_visits`, `show_all_groups_SEM`, and `single_group_display`.
+- The all-groups NPA adaptation plot can now hide total visits and show only drinking visits, or add shaded group spread bands.
+- Single-group NPA adaptation plots can now switch between group mean plus spread and thin individual-mouse traces with a thicker group mean.
+- Bottle-preference plots can now optionally show awake/sleep background indicators and calculate bin-wise group statistics with significance-star annotations.
+- Added `calc="all"` to `.plot_bottle_preference()` for total liquid-consumption trajectories across both bottle sides.
+- Added `.plot_bottle_preference_day()` for group violin endpoint comparisons of bottle preference or total liquid uptake on a selected experimental day.
+
+### 🧩 Changes
+
+- Updated the all-groups NPA adaptation line semantics: total visits are drawn as solid lines and drinking visits as dashed lines.
+- Fixed the timeline handling in NPA, nose-poke-count, licking-count, general activity, and bottle-preference plots. All-phase plots now reuse the prepared shared experiment-time axis, true phase subsets remove omitted protocol phases, and phase-only views preserve the correct clock position of each event within the selected phase.
+- Restricted bottle-preference phase-subset plots to the requested visible phase window while keeping the x-axis on elapsed experimental time.
+- Moved the all-groups general-activity legend inside the plot area below the day/night indicator bar.
+- Bottle-preference plots keep the day/night indicator disabled by default and draw it only when `day_night_indicator` is explicitly provided.
+- Renamed the default output folder of `.plot_phase_activity_summary()` from `plr_activity` to `visit_activity_summary`.
+- Moved `.plot_phase_activity_summary()` onto the general metric/plotting layer and updated its median/mean connector styling to use group colors with configurable line width and marker size.
+- Phase-activity summary significance labels are now rendered in black at a shared y-position instead of being placed independently above each box.
+- Phase-activity summary boxplot medians now use group colors and the same configurable line width as the connected phase-summary traces; outlier markers are scaled below the phase-summary marker size.
+- Phase-subset views that start with the first protocol phase still preserve the visible initial cage-entry delay of late-starting cage runs.
+- Updated the public synthetic dataset so the Group B run starts 12 days after Group A while its first phase-1 visits are delayed by 7.5 h, providing a stronger regression case for cage-run-independent phase analyses without shifting later protocol phases into the wrong mouse-day window.
 
 ### 📚 Documentation
 
-- Updated the public documentation to describe the toolkit as a general
-  IntelliCage analysis package with PL/PR as the first supported workflow.
-- Documented the new object-oriented synthetic-data example and subject
-  metadata pattern.
-- Documented the cage-run/export-block input layout and clarified that
-  export-block folders are technical raw-data pieces rather than biological
-  phases.
-- Expanded the PL/PR usage example with modular analysis sections, plot
-  interpretation, and mathematical definitions for rates, ratios, error rates,
-  threshold onsets, experience-learning onsets, and cumulative preference
-  onsets.
--->
+- Updated the public documentation to describe the toolkit as a general IntelliCage analysis package with PL/PR as the first supported workflow.
+- Documented the new object-oriented synthetic-data example and subject metadata pattern.
+- Documented the cage-run/export-block input layout and clarified that export-block folders are technical raw-data pieces rather than biological phases.
+- Expanded the PL/PR usage example with modular analysis sections, plot interpretation, and mathematical definitions for rates, ratios, error rates, threshold onsets, experience-learning onsets, and cumulative preference onsets.
+
 
 ---
 
