@@ -101,6 +101,7 @@ class GroupProfile:
     run_group: str
     group_name: str
     start_offset_hours: float
+    initial_entry_delay_hours: float
     rfid_start: int
     visit_rate_scale: float
     phase2_lick_probability: float
@@ -296,7 +297,15 @@ def build_phase_tables(
     phase_duration_hours = PHASE_DURATIONS_HOURS[phase_number]
     group_experiment_start = experiment_start + pd.to_timedelta(profile.start_offset_hours, unit="h")
     phase_start = group_experiment_start + pd.to_timedelta(phase_start_hours, unit="h")
-    phase_start_clock_hour = (group_experiment_start.hour + group_experiment_start.minute / 60.0 + phase_start_hours) % 24.0
+    entry_delay_hours = float(profile.initial_entry_delay_hours) if int(phase_number) == 1 else 0.0
+    sampling_duration_hours = phase_duration_hours - entry_delay_hours
+    if sampling_duration_hours <= 0:
+        raise ValueError("Initial entry delay must be shorter than phase 1 duration.")
+    phase_start_clock_hour = (
+        group_experiment_start.hour
+        + group_experiment_start.minute / 60.0
+        + phase_start_hours
+        + entry_delay_hours) % 24.0
     base_rates = {
         1: 6.5,
         2: 7.0,
@@ -309,11 +318,11 @@ def build_phase_tables(
     for _, mouse in subjects.iterrows():
         mouse_shift = float(rng.normal(0.0, 0.055))
         rate = base_rates[phase_number] * profile.visit_rate_scale * float(rng.lognormal(0.0, 0.12))
-        target_visit_count = int(rng.poisson(rate * phase_duration_hours))
+        target_visit_count = int(rng.poisson(rate * sampling_duration_hours))
         elapsed_values = sorted(
-            sample_elapsed_hours(
+            entry_delay_hours + sample_elapsed_hours(
                 rng,
-                duration_hours=phase_duration_hours,
+                duration_hours=sampling_duration_hours,
                 phase_start_clock_hour=phase_start_clock_hour)
             for _ in range(target_visit_count))
 
@@ -434,6 +443,7 @@ def write_dataset(
             run_group="GroupA",
             group_name="Group A",
             start_offset_hours=0.0,
+            initial_entry_delay_hours=0.0,
             rfid_start=910200000001000,
             visit_rate_scale=1.08,
             phase2_lick_probability=0.78,
@@ -448,7 +458,8 @@ def write_dataset(
         GroupProfile(
             run_group="GroupB",
             group_name="Group B",
-            start_offset_hours=7.5,
+            start_offset_hours=288.0,
+            initial_entry_delay_hours=7.5,
             rfid_start=910200000002000,
             visit_rate_scale=0.98,
             phase2_lick_probability=0.48,
@@ -488,23 +499,200 @@ def write_dataset(
                     "NosepokeCount": len(nosepokes),
                     "StartHour": PHASE_START_HOURS[phase_number],
                     "RunGroupStartOffsetHours": profile.start_offset_hours,
-                    "ObservedPhaseStart": format_timestamp(experiment_start + pd.to_timedelta(profile.start_offset_hours + PHASE_START_HOURS[phase_number], unit="h")),
+                    "InitialEntryDelayHours": profile.initial_entry_delay_hours if phase_number == 1 else 0.0,
+                    "ObservedPhaseStart": format_timestamp(experiment_start + pd.to_timedelta(
+                        profile.start_offset_hours
+                        + PHASE_START_HOURS[phase_number]
+                        + (profile.initial_entry_delay_hours if phase_number == 1 else 0.0),
+                        unit="h")),
                     "ObservedPhaseEnd": format_timestamp(experiment_start + pd.to_timedelta(profile.start_offset_hours + PHASE_START_HOURS[phase_number] + PHASE_DURATIONS_HOURS[phase_number], unit="h")),
                     "DurationHours": PHASE_DURATIONS_HOURS[phase_number]})
 
     manifest = pd.DataFrame(manifest_rows)
     write_table(manifest, output_root / "synthetic_dataset_manifest.tsv")
     (output_root / "README.md").write_text(
-        "# Synthetic IntelliCage PL/PR Dataset\n\n"
-        "Pseudo-data generated for documentation and demo analyses. Group A is "
-        "simulated as a stronger learner, while Group B shows flatter learning "
-        "and stronger phase-4 perseveration at the previous correct corner. "
-        "Group A also shows a clear saccharin preference, while Group B favors "
-        "plain water to mimic an anhedonia-like bottle-preference phenotype.\n\n"
-        "The two run-group folders intentionally have different real start "
-        "times. Group A starts at 2026-01-05 06:00, while Group B starts 7.5 h "
-        "later at 2026-01-05 13:30. This demonstrates why phase time windows "
-        "are declared per subject in analysis scripts or subject YAML files.\n",
+        """# Synthetic IntelliCage Group A/B Place-Learning and Place-Reversal Dataset
+
+This archive contains a fully synthetic IntelliCage-style example dataset generated for the
+`ic-analysis` toolkit. It is intended for documentation, tutorials, software testing, and
+workflow demonstrations. It is not derived from a biological experiment, does not contain
+real animal data, and should not be interpreted as evidence for a biological phenotype.
+
+The dataset mimics a realistic place-learning/place-reversal experiment closely enough to
+exercise the main analysis functions of the toolkit. It contains subject-resolved visit,
+nose-poke, and licking information in IntelliCage-like text files, together with metadata
+and generated result files. The behavioral differences between the two groups were
+intentionally implanted during simulation so that the analysis workflow can be checked
+against a known expected outcome.
+
+## Purpose
+
+The dataset was created to provide a reproducible benchmark for `ic-analysis`. It is meant
+to demonstrate and test:
+
+- loading of IntelliCage-style export folders
+- preparation of visit and nose-poke tables
+- assignment of biological phase windows independently of export-block names
+- alignment of cage runs that start on different calendar dates
+- day/night annotation on a common experimental-time axis
+- general visit activity analysis
+- nose-poke adaptation analysis
+- licking and bottle-consumption analyses
+- saccharin preference and total liquid uptake analyses
+- place-learning and place-reversal readouts
+- experience-based learning-onset analyses
+- generated plots, result tables, metadata snapshots, and audit-oriented outputs
+
+The dataset is deliberately richer than a minimal example because it is used to test several
+parts of the toolkit in one coherent worked example.
+
+## Synthetic experimental design
+
+The simulated experiment contains two groups with 10 pseudo-mice each:
+
+- **Group A**: stronger saccharin engagement, faster place learning, better reversal
+  performance, and weaker perseveration at the previously rewarded corner.
+- **Group B**: weaker saccharin engagement, slower or incomplete learning, weaker reversal
+  performance, and stronger perseveration during the reversal phase.
+
+The experiment consists of four biological phases:
+
+| Phase | Label | Duration | Simulated purpose |
+| --- | --- | ---: | --- |
+| 1 | Free habituation | 74 h | Free access to all corners and bottles |
+| 2 | Nose-poke adaptation | 48 h | Door access requires nose poking |
+| 3 | Place learning | 72 h | Mouse-specific rewarded corner assignment |
+| 4 | Place reversal | 72 h | Rewarded corner reassigned to test reversal learning |
+
+Throughout the simulated experiment, each corner contains one sweetened-water bottle and
+one plain-water bottle. This allows the same dataset to test both total liquid uptake and
+relative saccharin preference. The sweetened-water preference is part of the simulation
+design and is present from phase 1 onward.
+
+## Time-alignment stress test
+
+The two run-group folders intentionally use different real calendar start times:
+
+- Group A starts on `2026-01-05 06:00`.
+- Group B starts 12 days later on `2026-01-17 06:00`.
+- Group B also has a 7.5 h delay before its first phase-1 visit events.
+
+This timing offset is intentional. It tests whether analyses align behavior to biological
+experiment time and subject-specific phase windows rather than to absolute timestamps,
+export-folder names, or the first recorded event in a selected plot. In a correct analysis,
+Group A and Group B can be compared on the same elapsed experimental timeline even though
+their raw cage runs occurred on different calendar dates.
+
+## File structure
+
+The dataset follows the folder layout expected by the `ic-analysis` loader:
+
+```text
+synthetic_group_ab_place_learning/
+|-- GroupA/
+|   |-- Phase1/IntelliCage/Visits.txt
+|   |-- Phase1/IntelliCage/Nosepokes.txt
+|   |-- Phase2/IntelliCage/Visits.txt
+|   |-- Phase2/IntelliCage/Nosepokes.txt
+|   |-- Phase3/IntelliCage/Visits.txt
+|   |-- Phase3/IntelliCage/Nosepokes.txt
+|   |-- Phase4/IntelliCage/Visits.txt
+|   `-- Phase4/IntelliCage/Nosepokes.txt
+|-- GroupB/
+|   |-- Phase1/IntelliCage/Visits.txt
+|   |-- Phase1/IntelliCage/Nosepokes.txt
+|   |-- Phase2/IntelliCage/Visits.txt
+|   |-- Phase2/IntelliCage/Nosepokes.txt
+|   |-- Phase3/IntelliCage/Visits.txt
+|   |-- Phase3/IntelliCage/Nosepokes.txt
+|   |-- Phase4/IntelliCage/Visits.txt
+|   `-- Phase4/IntelliCage/Nosepokes.txt
+|-- results/
+|   |-- csv/
+|   |-- 1h_bins/
+|   |-- 24h_day_bins/
+|   |-- bottle_preference_summary/
+|   |-- visit_activity_summary/
+|   |-- plr_segments/
+|   |-- plr_endpoints/
+|   |-- plr_experience/
+|   |-- plr_thresholds/
+|   |-- plr_derived/
+|   |-- plr_cumulative/
+|   |-- experiment.yaml
+|   |-- phases.yaml
+|   `-- subjects.yaml
+|-- synthetic_dataset_manifest.tsv
+`-- README.md
+```
+
+The `GroupA` and `GroupB` folders contain the synthetic raw exports. The `results` folder
+contains outputs generated by the example `ic-analysis` workflow, including figures,
+machine-readable result tables, YAML metadata snapshots, phase manifests, and intermediate
+tables used for inspection and reproducibility.
+
+Although the raw export folders are named `Phase1` to `Phase4`, these folder names should
+be understood as convenient export-block labels in this synthetic dataset. In real
+IntelliCage experiments, export blocks do not necessarily correspond to biological phases.
+The analysis workflow therefore defines phase timing explicitly in metadata instead of
+inferring phases from folder names.
+
+## Manifest
+
+The file `synthetic_dataset_manifest.tsv` summarizes the generated raw dataset. It lists,
+for each run group and phase, the mouse count, visit count, nose-poke count, scheduled
+phase start, run-group start offset, initial-entry delay, observed phase start, observed
+phase end, and phase duration.
+
+## Reproducibility
+
+The dataset was generated from the `ic-analysis` repository with:
+
+```bash
+python additional_scripts/generate_synthetic_group_ab_data.py --overwrite
+```
+
+The default output location of the generator is:
+
+```text
+example_data/synthetic_group_ab_place_learning
+```
+
+The generator uses deterministic random-number generation, so the dataset can be recreated
+from the same repository state. The script that generated this dataset is:
+
+```text
+additional_scripts/generate_synthetic_group_ab_data.py
+```
+
+The accompanying example workflow used to analyze the dataset is:
+
+```text
+user_scripts/place_learning_example.py
+```
+
+## Recommended use
+
+This dataset is best used together with the `ic-analysis` documentation and example user
+script. It can be used to verify installation, inspect the expected input-folder layout,
+rerun the demonstration analysis, compare newly generated outputs to the archived example
+outputs, and develop new analysis functions against a known synthetic phenotype.
+
+When using the dataset in publications, tutorials, or tests, please state explicitly that
+it is synthetic and was generated for software validation and demonstration.
+
+## Related software
+
+The dataset accompanies the `ic-analysis` Python toolkit:
+
+- Repository: <https://github.com/FabrizioMusacchio/ic-analysis>
+- Software archive: <https://doi.org/10.5281/zenodo.22181525>
+
+## Suggested dataset citation
+
+Musacchio, F. (2026). *Example datasets for the IntelliCage Analysis Toolkit*. Zenodo.
+https://doi.org/10.5281/zenodo.21603005
+""",
         encoding="utf-8")
 
 def parse_args(argv: list[str] | None = None) -> ArgumentParser:
