@@ -2,7 +2,7 @@ Place learning and reversal example
 ===================================
 
 This tutorial walks through the analysis workflow with the synthetic-data provided by our
-toolbox. It is meant to be read as a model for your own user scripts: keep
+toolkit. It is meant to be read as a model for your own user scripts: keep
 the package functions generic, define experiment-specific choices in the
 script, save all derived tables, and generate figures from saved summary
 tables whenever possible.
@@ -332,7 +332,7 @@ preparation step.
 
 The now following sections walk through the analysis and plotting steps. Each section 
 shows the code snippet to run the analysis and the resulting plot. It does not
-matter in which order you run the analysis steps, the toolbox's methods are independent 
+matter in which order you run the analysis steps, the toolkit's methods are independent 
 of each other. 
 
 Age distribution
@@ -422,7 +422,7 @@ or with the animals' daily rhythm. In real cohorts, abrupt gaps or single-group
 drops are often more important as data-quality signals than the exact height of
 the activity curve.
 
-The toolbox also provides a more compact phase-level summary of visit activity. 
+The toolkit also provides a more compact phase-level summary of visit activity. 
 It computes the mean visit rate per mouse and phase:
 
 .. code-block:: python
@@ -658,7 +658,7 @@ For total liquid uptake on the same day, switch to ``calc="all"``.
 Learning and reversal behavior
 ------------------------------
 
-The toolbox provides two functions that calculate the success and error rates for
+The toolkit provides two functions that calculate the success and error rates for
 place learning and reversal. The success rate is defined as the number of visits 
 to the correct corner divided by all visits for each mouse, day phase (day, night, 
 or both), and time bin:
@@ -676,7 +676,7 @@ The matching error rate is the exact complement:
    \frac{N_{all\ visits}-N_{success\ visits}}
         {N_{all\ visits}}
 
-Further, the toolbox provides three complementary metrics: for PL and PR.
+Further, the toolkit provides three complementary metrics: for PL and PR.
 
 - ``"correct_corner_visit"`` counts all visits to the assigned correct corner, 
 - ``"correct_np_visit"`` requires a correct nose-poke visit, and 
@@ -804,7 +804,7 @@ not shown here).
 Binned learning curves
 ----------------------
 
-For finer timing, the toolbox offers an alternative equivalent to the 
+For finer timing, the toolkit offers an alternative equivalent to the 
 ``my_pl_exp.plot_plr_phase_segment_rate`` function. In ``plot_plr_learning_rate``,
 the user can define the bin width in hours (``my_pl_exp.plot_plr_phase_segment_rate``
 uses a fixed 12 h bin width). Additionally to the learning rate, the user can also 

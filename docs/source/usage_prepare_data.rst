@@ -12,7 +12,7 @@ Recommended folder layout
 Put each cage run into one folder below the experiment data root. Inside each
 cage-run folder, keep one folder per IntelliCage export block (= the unpacked
 exported IntelliCage zip archive). From each export block/extracted zip archive, 
-the toolbox only needs the ``IntelliCage/`` subfolder, which contains the 
+the toolkit only needs the ``IntelliCage/`` subfolder, which contains the 
 ``Visits.txt`` and ``Nosepokes.txt`` tables. Just keep the ``IntelliCage/`` 
 subfolder and its two text tables, and place it into a clearly named export-block:
 
@@ -54,14 +54,14 @@ subfolder and its two text tables, and place it into a clearly named export-bloc
                |-- Visits.txt
                `-- Nosepokes.txt
 
-Only ``Visits.txt`` and ``Nosepokes.txt`` are currently required by the toolbox.
+Only ``Visits.txt`` and ``Nosepokes.txt`` are currently required by the toolkit.
 However, you can keep all exported IntelliCage text tables from the ``IntelliCage/`` 
 folder, they may become useful for future analysis features, and they will not 
 interfere with the current workflow.
 
 "clearly named export-block" means that these folder names should be readable, 
 unique, and establish an alphanumerical order that matches the chronological 
-order of the IntelliCage exports. The toolbox will read the export-block folders 
+order of the IntelliCage exports. The toolkit will read the export-block folders 
 in alphanumerical order and concatenate them into one dataset, thus, any
 incorrect order will result in a wrong concatenation order.
 
