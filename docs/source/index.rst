@@ -38,6 +38,10 @@ IntelliCage Analysis Toolkit documentation
    :target: https://github.com/FabrizioMusacchio/ic-analysis/pulls
    :alt: GitHub Issues or Pull Requests
 
+.. image:: https://readthedocs.org/projects/ic-analysis/badge/?version=latest
+   :target: https://ic-analysis.readthedocs.io/en/latest/?badge=latest
+   :alt: Documentation Status
+
 .. image:: https://img.shields.io/github/languages/code-size/fabriziomusacchio/ic-analysis
    :alt: GitHub code size in bytes
 
