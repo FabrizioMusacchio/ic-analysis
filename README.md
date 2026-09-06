@@ -274,3 +274,7 @@ If you use the *IntelliCage Analysis Toolkit* in scientific work, please cite it
 
 Zenodo software archive:
 [https://doi.org/10.5281/zenodo.22181525](https://doi.org/10.5281/zenodo.22181525) -->
+
+If you use the provided example datasets in your analysis, please also cite the corresponding Zenodo record:
+
+> Musacchio, F. (2026). *IntelliCage Analysis Toolkit Example Dataset.* Zenodo. https://doi.org/10.5281/zenodo.22518261
