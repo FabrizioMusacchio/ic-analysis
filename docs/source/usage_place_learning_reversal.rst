@@ -1048,8 +1048,8 @@ More generally, for mouse :math:`m` on phase day :math:`d`:
 
    \mathrm{completion\ efficiency}_{m,d}
    =
-   \frac{N_{\mathrm{rewarded\ correct\ corner\ visits},m,d}}
-        {N_{\mathrm{correct\ nosepoke\ visits},m,d}}
+   \frac{N_{\mathrm{rew.\ corr.\ corner\ visits},m,d}}
+        {N_{\mathrm{corr.\ nosep.\ visits},m,d}}
 
 This is useful because a mouse may already perform the correct nose-poke
 response but still fail to reliably complete the rewarded corner visit. A high
@@ -1096,11 +1096,7 @@ reversal preference index is:
 
 .. math::
 
-   \mathrm{RPI}
-   =
-   \frac{20}{20 + 30}
-   =
-   0.4
+   \mathrm{RPI} = \frac{20}{20 + 30} = 0.4
 
 A value of :math:`0` means that the mouse visited only the previous correct
 corner, :math:`0.5` means equal visits to old and new correct corners, and
@@ -1108,11 +1104,12 @@ corner, :math:`0.5` means equal visits to old and new correct corners, and
 
 .. math::
 
-   \mathrm{RPI}_{m,d}
-   =
-   \frac{N_{\mathrm{new\ correct\ corner\ visits},m,d}}
-        {N_{\mathrm{new\ correct\ corner\ visits},m,d}
-         + N_{\mathrm{previous\ correct\ corner\ visits},m,d}}
+   \begin{aligned}
+   &\mathrm{RPI}_{m,d} = {} \\
+   &\frac{N_{\mathrm{new\ corr.\ corner\ visits},m,d}}
+        {N_{\mathrm{new\ corr.\ corner\ visits},m,d}
+         + N_{\mathrm{prev.\ corr.\ corner\ visits},m,d}}
+   \end{aligned}
 
 .. code-block:: python
 
