@@ -80,7 +80,6 @@ EXPERIMENT = {
     "mouse_day": {
         "start": "06:00",
         "end": "18:00"}}
-
 # %% SUBJECT METADATA
 """Define which raw IntelliCage animal IDs are analyzed.
 
@@ -88,14 +87,14 @@ Only animals declared in ``SUBJECTS`` are included after loading. Per-animal
 metadata attach group, sex, public true-ID labels, date of birth, and PL/PR
 corner assignments. The ``phases`` field stores the real begin/end timestamps
 for each phase and each subject, which is necessary when run-group or cage
-folders started at different real clock times.
+folders started at different real dates or clock times.
 """
 SUBJECTS = {
     "910200000001000": {
         "group": "Group A",
         "sex": "male",
         "true_id": "A01",
-        "date_of_birth": "2025-09-01",
+        "date_of_birth": "2025-09-04",
         "corner_assignments": {
             3: 1,
             4: 3},
@@ -108,7 +107,7 @@ SUBJECTS = {
         "group": "Group A",
         "sex": "female",
         "true_id": "A02",
-        "date_of_birth": "2025-09-01",
+        "date_of_birth": "2025-09-04",
         "corner_assignments": {
             3: 2,
             4: 4},
@@ -121,7 +120,7 @@ SUBJECTS = {
         "group": "Group A",
         "sex": "male",
         "true_id": "A03",
-        "date_of_birth": "2025-09-01",
+        "date_of_birth": "2025-08-20",
         "corner_assignments": {
             3: 3,
             4: 1},
@@ -134,7 +133,7 @@ SUBJECTS = {
         "group": "Group A",
         "sex": "female",
         "true_id": "A04",
-        "date_of_birth": "2025-09-01",
+        "date_of_birth": "2025-08-20",
         "corner_assignments": {
             3: 4,
             4: 2},
@@ -147,7 +146,7 @@ SUBJECTS = {
         "group": "Group A",
         "sex": "male",
         "true_id": "A05",
-        "date_of_birth": "2025-09-01",
+        "date_of_birth": "2025-08-22",
         "corner_assignments": {
             3: 1,
             4: 3},
@@ -160,7 +159,7 @@ SUBJECTS = {
         "group": "Group A",
         "sex": "female",
         "true_id": "A06",
-        "date_of_birth": "2025-09-01",
+        "date_of_birth": "2025-09-17",
         "corner_assignments": {
             3: 2,
             4: 4},
@@ -230,10 +229,10 @@ SUBJECTS = {
             3: 1,
             4: 3},
         "phases": {
-            1: {"time_window": ("2026-01-05 13:30:00", "2026-01-08 15:30:00")},
-            2: {"time_window": ("2026-01-08 15:30:00", "2026-01-10 15:30:00")},
-            3: {"time_window": ("2026-01-10 15:30:00", "2026-01-13 15:30:00")},
-            4: {"time_window": ("2026-01-13 15:30:00", "2026-01-16 15:30:00")}}},
+            1: {"time_window": ("2026-01-17 06:00:00", "2026-01-20 08:00:00")},
+            2: {"time_window": ("2026-01-20 08:00:00", "2026-01-22 08:00:00")},
+            3: {"time_window": ("2026-01-22 08:00:00", "2026-01-25 08:00:00")},
+            4: {"time_window": ("2026-01-25 08:00:00", "2026-01-28 08:00:00")}}},
     "910200000002001": {
         "group": "Group B",
         "sex": "female",
@@ -243,10 +242,10 @@ SUBJECTS = {
             3: 2,
             4: 4},
         "phases": {
-            1: {"time_window": ("2026-01-05 13:30:00", "2026-01-08 15:30:00")},
-            2: {"time_window": ("2026-01-08 15:30:00", "2026-01-10 15:30:00")},
-            3: {"time_window": ("2026-01-10 15:30:00", "2026-01-13 15:30:00")},
-            4: {"time_window": ("2026-01-13 15:30:00", "2026-01-16 15:30:00")}}},
+            1: {"time_window": ("2026-01-17 06:00:00", "2026-01-20 08:00:00")},
+            2: {"time_window": ("2026-01-20 08:00:00", "2026-01-22 08:00:00")},
+            3: {"time_window": ("2026-01-22 08:00:00", "2026-01-25 08:00:00")},
+            4: {"time_window": ("2026-01-25 08:00:00", "2026-01-28 08:00:00")}}},
     "910200000002002": {
         "group": "Group B",
         "sex": "male",
@@ -256,10 +255,10 @@ SUBJECTS = {
             3: 3,
             4: 1},
         "phases": {
-            1: {"time_window": ("2026-01-05 13:30:00", "2026-01-08 15:30:00")},
-            2: {"time_window": ("2026-01-08 15:30:00", "2026-01-10 15:30:00")},
-            3: {"time_window": ("2026-01-10 15:30:00", "2026-01-13 15:30:00")},
-            4: {"time_window": ("2026-01-13 15:30:00", "2026-01-16 15:30:00")}}},
+            1: {"time_window": ("2026-01-17 06:00:00", "2026-01-20 08:00:00")},
+            2: {"time_window": ("2026-01-20 08:00:00", "2026-01-22 08:00:00")},
+            3: {"time_window": ("2026-01-22 08:00:00", "2026-01-25 08:00:00")},
+            4: {"time_window": ("2026-01-25 08:00:00", "2026-01-28 08:00:00")}}},
     "910200000002003": {
         "group": "Group B",
         "sex": "female",
@@ -269,10 +268,10 @@ SUBJECTS = {
             3: 4,
             4: 2},
         "phases": {
-            1: {"time_window": ("2026-01-05 13:30:00", "2026-01-08 15:30:00")},
-            2: {"time_window": ("2026-01-08 15:30:00", "2026-01-10 15:30:00")},
-            3: {"time_window": ("2026-01-10 15:30:00", "2026-01-13 15:30:00")},
-            4: {"time_window": ("2026-01-13 15:30:00", "2026-01-16 15:30:00")}}},
+            1: {"time_window": ("2026-01-17 06:00:00", "2026-01-20 08:00:00")},
+            2: {"time_window": ("2026-01-20 08:00:00", "2026-01-22 08:00:00")},
+            3: {"time_window": ("2026-01-22 08:00:00", "2026-01-25 08:00:00")},
+            4: {"time_window": ("2026-01-25 08:00:00", "2026-01-28 08:00:00")}}},
     "910200000002004": {
         "group": "Group B",
         "sex": "male",
@@ -282,10 +281,10 @@ SUBJECTS = {
             3: 1,
             4: 3},
         "phases": {
-            1: {"time_window": ("2026-01-05 13:30:00", "2026-01-08 15:30:00")},
-            2: {"time_window": ("2026-01-08 15:30:00", "2026-01-10 15:30:00")},
-            3: {"time_window": ("2026-01-10 15:30:00", "2026-01-13 15:30:00")},
-            4: {"time_window": ("2026-01-13 15:30:00", "2026-01-16 15:30:00")}}},
+            1: {"time_window": ("2026-01-17 06:00:00", "2026-01-20 08:00:00")},
+            2: {"time_window": ("2026-01-20 08:00:00", "2026-01-22 08:00:00")},
+            3: {"time_window": ("2026-01-22 08:00:00", "2026-01-25 08:00:00")},
+            4: {"time_window": ("2026-01-25 08:00:00", "2026-01-28 08:00:00")}}},
     "910200000002005": {
         "group": "Group B",
         "sex": "female",
@@ -295,10 +294,10 @@ SUBJECTS = {
             3: 2,
             4: 4},
         "phases": {
-            1: {"time_window": ("2026-01-05 13:30:00", "2026-01-08 15:30:00")},
-            2: {"time_window": ("2026-01-08 15:30:00", "2026-01-10 15:30:00")},
-            3: {"time_window": ("2026-01-10 15:30:00", "2026-01-13 15:30:00")},
-            4: {"time_window": ("2026-01-13 15:30:00", "2026-01-16 15:30:00")}}},
+            1: {"time_window": ("2026-01-17 06:00:00", "2026-01-20 08:00:00")},
+            2: {"time_window": ("2026-01-20 08:00:00", "2026-01-22 08:00:00")},
+            3: {"time_window": ("2026-01-22 08:00:00", "2026-01-25 08:00:00")},
+            4: {"time_window": ("2026-01-25 08:00:00", "2026-01-28 08:00:00")}}},
     "910200000002006": {
         "group": "Group B",
         "sex": "male",
@@ -308,10 +307,10 @@ SUBJECTS = {
             3: 3,
             4: 1},
         "phases": {
-            1: {"time_window": ("2026-01-05 13:30:00", "2026-01-08 15:30:00")},
-            2: {"time_window": ("2026-01-08 15:30:00", "2026-01-10 15:30:00")},
-            3: {"time_window": ("2026-01-10 15:30:00", "2026-01-13 15:30:00")},
-            4: {"time_window": ("2026-01-13 15:30:00", "2026-01-16 15:30:00")}}},
+            1: {"time_window": ("2026-01-17 06:00:00", "2026-01-20 08:00:00")},
+            2: {"time_window": ("2026-01-20 08:00:00", "2026-01-22 08:00:00")},
+            3: {"time_window": ("2026-01-22 08:00:00", "2026-01-25 08:00:00")},
+            4: {"time_window": ("2026-01-25 08:00:00", "2026-01-28 08:00:00")}}},
     "910200000002007": {
         "group": "Group B",
         "sex": "female",
@@ -321,10 +320,10 @@ SUBJECTS = {
             3: 4,
             4: 2},
         "phases": {
-            1: {"time_window": ("2026-01-05 13:30:00", "2026-01-08 15:30:00")},
-            2: {"time_window": ("2026-01-08 15:30:00", "2026-01-10 15:30:00")},
-            3: {"time_window": ("2026-01-10 15:30:00", "2026-01-13 15:30:00")},
-            4: {"time_window": ("2026-01-13 15:30:00", "2026-01-16 15:30:00")}}},
+            1: {"time_window": ("2026-01-17 06:00:00", "2026-01-20 08:00:00")},
+            2: {"time_window": ("2026-01-20 08:00:00", "2026-01-22 08:00:00")},
+            3: {"time_window": ("2026-01-22 08:00:00", "2026-01-25 08:00:00")},
+            4: {"time_window": ("2026-01-25 08:00:00", "2026-01-28 08:00:00")}}},
     "910200000002008": {
         "group": "Group B",
         "sex": "male",
@@ -334,10 +333,10 @@ SUBJECTS = {
             3: 1,
             4: 3},
         "phases": {
-            1: {"time_window": ("2026-01-05 13:30:00", "2026-01-08 15:30:00")},
-            2: {"time_window": ("2026-01-08 15:30:00", "2026-01-10 15:30:00")},
-            3: {"time_window": ("2026-01-10 15:30:00", "2026-01-13 15:30:00")},
-            4: {"time_window": ("2026-01-13 15:30:00", "2026-01-16 15:30:00")}}},
+            1: {"time_window": ("2026-01-17 06:00:00", "2026-01-20 08:00:00")},
+            2: {"time_window": ("2026-01-20 08:00:00", "2026-01-22 08:00:00")},
+            3: {"time_window": ("2026-01-22 08:00:00", "2026-01-25 08:00:00")},
+            4: {"time_window": ("2026-01-25 08:00:00", "2026-01-28 08:00:00")}}},
     "910200000002009": {
         "group": "Group B",
         "sex": "female",
@@ -347,10 +346,10 @@ SUBJECTS = {
             3: 2,
             4: 4},
         "phases": {
-            1: {"time_window": ("2026-01-05 13:30:00", "2026-01-08 15:30:00")},
-            2: {"time_window": ("2026-01-08 15:30:00", "2026-01-10 15:30:00")},
-            3: {"time_window": ("2026-01-10 15:30:00", "2026-01-13 15:30:00")},
-            4: {"time_window": ("2026-01-13 15:30:00", "2026-01-16 15:30:00")}}}}
+            1: {"time_window": ("2026-01-17 06:00:00", "2026-01-20 08:00:00")},
+            2: {"time_window": ("2026-01-20 08:00:00", "2026-01-22 08:00:00")},
+            3: {"time_window": ("2026-01-22 08:00:00", "2026-01-25 08:00:00")},
+            4: {"time_window": ("2026-01-25 08:00:00", "2026-01-28 08:00:00")}}}}
 
 """Optional YAML subject workflow.
 
@@ -406,31 +405,32 @@ my_pl_exp.plot_ages(
     time_unit="months", # months, days, years
     show_N=True,
     base_font_size=BASE_FONT_SIZE,
-    figsize_cm=VIOLIN_FIGSIZE_CM,
-    plot_layout={"ylim": (0.0, 8),})
+    figsize_cm=(3.5, 4.5), 
+    plot_layout={"ylim": (0.0, 8),
+                 "title": "Mouse age  phase 1 start"})
 # %% INSPECT GENERAL ACTIVITY 
 """ 
 Let's first inspect the overall activity of the mice in the experiment. 
 The following code will generate a plot showing the activity of the mice over 
 time, binned by hours. You can adjust the bin size to suit your analysis needs. 
 The plot will include all phases (phases="all") and day phases (dayphase="all"), 
-and it will use the specified spread metric and plot style. 
+and it will use the specified spread metric and plot style.
 
-In case you want to limit the plot to one specific phase, you can set the phases 
+In case you want to limit the plot to one specific phase, you can set the phases
 parameter to the desired phase number (e.g., phases=2 for phase 2).
 """
 my_pl_exp.plot_mice_activity(
-    bin_hours=1, # 1, or 12, or 24...whatever suits your analysis. 
-    phases="all", # all, or select specific phases (2,3), (3,4), etc.
-    dayphase="all", # all, day, night
-    phase_max_hours=PHASE_MAX_HOURS,
-    spread_metric="sem",
-    plot_style="line",
-    day_night_indicator=("aw", "sl"),
-    base_font_size=BASE_FONT_SIZE,
-    figsize_cm=TIMELINE_FIGSIZE_CM,
+    bin_hours           = 1, # 1, or 12, or 24...whatever suits your analysis.
+    phases              = "all", # all, or select specific phases (2,3), (3,4), etc.
+    dayphase            = "all", # all, day, night
+    phase_max_hours     = PHASE_MAX_HOURS,
+    spread_metric       = "sem",
+    plot_style          = "line",
+    day_night_indicator = ("aw", "sl"),
+    base_font_size      = BASE_FONT_SIZE,
+    figsize_cm          = TIMELINE_FIGSIZE_CM_NO_LEGEND,
     plot_layout={"legend_font_size":LEGEND_FONT_SIZE, 
-                    "legend":True})
+                 "legend":True})
 
 """ 
 Another way to summarize the activity is to plot the phase 
@@ -441,17 +441,19 @@ significant differences in activity compared to the phase 1 (=baseline)
 activity.
 """
 my_pl_exp.plot_phase_activity_summary(
-    dayphase="all", # "all", "day", "night"
-    phase_max_hours=PHASE_MAX_HOURS,
-    base_font_size=BASE_FONT_SIZE,
-    figsize_cm=(7, 8),
-    show_N=True,
-    xtick_rotation=35,
+    dayphase            = "all", # "all", "day", "night"
+    phase_max_hours     = PHASE_MAX_HOURS,
+    base_font_size      = BASE_FONT_SIZE,
+    figsize_cm          = (6, 6.2),
+    show_N              = True,
+    xtick_rotation      = 0,
+    median_line_width   = 0.8,
+    median_marker_size  = 3.0,
     plot_layout={
         "legend": True,
-        "legend_loc": "upper right",
+        "legend_loc": "upper left",
         "legend_font_size": LEGEND_FONT_SIZE,
-        "ylim": (0.0, 20),})
+        "ylim": (0.0, 25),})
 # %% INSPECT DRINKING BEHAVIOR
 """ 
 Next we would inspect the drinking behavior of the mice. This is important,
@@ -461,17 +463,20 @@ the nosepoke (NPA) and show continuous drinking behavior during all phases.
 """
 
 my_pl_exp.plot_NP_adaptation(
-    phases="all", # "all", (2,4)
-    bin_hours=1, # 1, or 12, or 24...whatever suits your analysis.
-    dayphase="all", # "all", "day", "night"
-    phase_max_hours=PHASE_MAX_HOURS,
-    spread_metric="sem",
-    plot_style="line",
-    base_font_size=BASE_FONT_SIZE,
-    figsize_cm=TIMELINE_FIGSIZE_CM_NO_LEGEND,
-    day_night_indicator=("aw", "sl"),
+    phases                  = "all", # "all", (2,4)
+    bin_hours               = 1, # 1, or 12, or 24...whatever suits your analysis.
+    dayphase                = "all", # "all", "day", "night"
+    phase_max_hours         = PHASE_MAX_HOURS,
+    spread_metric           = "sem",
+    plot_style              = "line",
+    show_all_visits         = True,
+    show_all_groups_SEM     = True,
+    single_group_display    = "spread", # "spread" or "individual"
+    base_font_size          = BASE_FONT_SIZE,
+    figsize_cm              = TIMELINE_FIGSIZE_CM_NO_LEGEND,
+    day_night_indicator     = ("aw", "sl"),
     plot_layout={"legend_font_size":LEGEND_FONT_SIZE, 
-                    "legend":True})
+                 "legend":True})
 my_pl_exp.plot_NP_counts(
     phases="all", #"all" (2,4)
     bin_hours=1, # 1, or 12, or 24...whatever suits your analysis.
@@ -483,7 +488,7 @@ my_pl_exp.plot_NP_counts(
     figsize_cm=TIMELINE_FIGSIZE_CM_NO_LEGEND,
     day_night_indicator=("aw", "sl"),
     plot_layout={"legend_font_size":LEGEND_FONT_SIZE, 
-                    "legend":True})
+                 "legend":True})
 my_pl_exp.plot_licking_counts(
     phases="all",
     bin_hours=1, # 1, or 12, or 24...whatever suits your analysis.
@@ -495,7 +500,7 @@ my_pl_exp.plot_licking_counts(
     figsize_cm=TIMELINE_FIGSIZE_CM_NO_LEGEND,
     day_night_indicator=("aw", "sl"),
     plot_layout={"legend_font_size":LEGEND_FONT_SIZE, 
-                    "legend":True})
+                 "legend":True})
 
 """ HEDONIC/ANHEDONIC BEHAVIOR: BOTTLE PREFERENCE
 In case you have a two-bottle choice setup, with one bottle containing plain water 
@@ -508,30 +513,49 @@ BOTTLE_BIN_HOURS = [24, 2 * 24]
 for current_bin_hours in BOTTLE_BIN_HOURS:
     # current_bin_hours=BOTTLE_BIN_HOURS[0]
     my_pl_exp.plot_bottle_preference(
+        phases              = "all",
+        dayphase            = "day", # "all", "day", "night" - here, it makes most sense to use the day phase, 
+                                     # because the mice are awake and active during the day. During night, they 
+                                     # are mostly asleep and not drinking, which would confound the analysis.
+                                     # You can inspect the night phase drinking behavior with the plots you
+                                     # have just generated above.
+        left_bottle         = "plain water", # define which bottle is the left and which is the right, based on your experimental setup
+        right_bottle        = "saccharin",
+        calc                = "right_bottle/left_bottle", # "all", "right_bottle/left_bottle", "left_bottle/right_bottle", "left_bottle", or "right_bottle"
+        bin_h               = current_bin_hours,
+        phase_max_hours     = PHASE_MAX_HOURS,
+        spread_metric       = "sem",
+        plot_style          = "line",
+        base_font_size      = BASE_FONT_SIZE,
+        x_unit              = "days", # days, hours, weeks - in case your bin_h is e.g. 1 week, choose "weeks" as x_unit. 
+        indicate_dots       = True,
+        calc_stats          = True,
+        day_night_indicator = None, # ("aw", "sl") or None
+        figsize_cm          = TIMELINE_FIGSIZE_CM_NO_LEGEND,
+        plot_layout = {"xticks": np.arange(0,13,1),
+                       "legend_loc": "best",
+                       "legend_font_size":LEGEND_FONT_SIZE})
+
+    my_pl_exp.plot_bottle_preference(
         phases="all",
-        dayphase="day", # "all", "day", "night" - here, it makes most sense to use the day phase, 
-                        # because the mice are awake and active during the day. During night, they 
-                        # are mostly asleep and not drinking, which would confound the analysis.
-                        # You can inspect the night phase drinking behavior with the plots you
-                        # have just generated above.
-        left_bottle="plain water", # define which bottle is the left and which is the right, based on your experimental setup
+        dayphase="day",
+        left_bottle="plain water",
         right_bottle="saccharin",
-        calc="right_bottle/left_bottle", # "right_bottle/left_bottle" or "left_bottle/right_bottle" or "left_bottle" or "right_bottle"
+        calc="all",
         bin_h=current_bin_hours,
         phase_max_hours=PHASE_MAX_HOURS,
         spread_metric="sem",
         plot_style="line",
         base_font_size=BASE_FONT_SIZE,
-        x_unit="days", # days, hours, weeks - in case your bin_h is e.g. 1 week, choose "weeks" as x_unit. 
+        x_unit="days",
+        calc_stats=True,
         indicate_dots=True,
         figsize_cm=TIMELINE_FIGSIZE_CM_NO_LEGEND,
         plot_layout={
             "xticks": np.arange(0,13,1),
             "legend_loc": "best",
-            "legend_font_size": 11,
-            "legend_font_size":LEGEND_FONT_SIZE})
-
-    # Alternative bottle-preference modes:
+            "legend_font_size":LEGEND_FONT_SIZE,
+            "ylim": (0.0, 2300)})
     my_pl_exp.plot_bottle_preference(
         phases="all",
         dayphase="day",
@@ -549,7 +573,6 @@ for current_bin_hours in BOTTLE_BIN_HOURS:
         plot_layout={
             "xticks": np.arange(0,13,1),
             "legend_loc": "best",
-            "legend_font_size": 11,
             "legend_font_size":LEGEND_FONT_SIZE})
     my_pl_exp.plot_bottle_preference(
         phases="all",
@@ -568,7 +591,6 @@ for current_bin_hours in BOTTLE_BIN_HOURS:
         plot_layout={
             "xticks": np.arange(0,13,1),
             "legend_loc": "best",
-            "legend_font_size": 11,
             "legend_font_size":LEGEND_FONT_SIZE})
     my_pl_exp.plot_bottle_preference(
         phases="all",
@@ -587,8 +609,40 @@ for current_bin_hours in BOTTLE_BIN_HOURS:
         plot_layout={
             "xticks": np.arange(0,13,1),
             "legend_loc": "best",
-            "legend_font_size": 11,
             "legend_font_size":LEGEND_FONT_SIZE})
+
+"""Plot bottle-preference endpoint summaries for a selected experimental day.
+
+The violin endpoint is useful when you want an explicit group comparison for a
+single analysis day, for example saccharin preference or total liquid uptake on
+the final day of the experiment.
+"""
+my_pl_exp.plot_bottle_preference_day(
+    experiment_day  = 10,
+    phases          = "all",
+    dayphase        = "day",
+    left_bottle     = "plain water",
+    right_bottle    = "saccharin",
+    calc            = "right_bottle/left_bottle",
+    phase_max_hours = PHASE_MAX_HOURS,
+    calc_stats      = True,
+    base_font_size  = BASE_FONT_SIZE,
+    figsize_cm      = (3.5, 5),
+    show_N          = False,
+    plot_layout     = {"ylim": (0.0, 120.0)})
+my_pl_exp.plot_bottle_preference_day(
+    experiment_day  = 10,
+    phases          = "all",
+    dayphase        = "day",
+    left_bottle     = "plain water",
+    right_bottle    = "saccharin",
+    calc            = "all",
+    phase_max_hours = PHASE_MAX_HOURS,
+    calc_stats      = True,
+    base_font_size  = BASE_FONT_SIZE,
+    figsize_cm      = (3.5, 5),
+    show_N          = False,
+    plot_layout     ={"ylabel": "Total liquid uptake [licks]"})
 # %% EVALUATE LEARNING AND REVERSAL BEHAVIOR
 """ 
 A first step to evaluate learning and reversal behavior is to inspect the timecourse of the
@@ -604,7 +658,7 @@ rate of correct corner visits and error rate) for three different metrics:
 for current_phase in PLR_PHASES:
     # current_phase = PLR_PHASES[0]
     for current_metric in PLR_METRICS:
-        # current_metric = PLR_METRICS[0]
+        # current_metric = PLR_METRICS[2]
         my_pl_exp.plot_plr_phase_segment_rate(
             phase_number=current_phase,
             metric=current_metric,
@@ -706,16 +760,17 @@ corner visit rates for the as correct assigned corner during PR, the previously 
 and the other two corners:
 """
 my_pl_exp.plot_plr_reversal_components(
-    phase_number=4,
-    bin_hours=1,
-    dayphase="all", # all, day, night
-    phase_max_hours=PHASE_MAX_HOURS,
-    spread_metric="sem",
-    plot_style="line",
-    base_font_size=BASE_FONT_SIZE,
-    figsize_cm=PHASE_FIGSIZE_CM_W_LEGEND,
+    phase_number        = 4,
+    bin_hours           = 1,
+    dayphase            = "all", # all, day, night
+    phase_max_hours     = PHASE_MAX_HOURS,
+    spread_metric       = "sem",
+    plot_style          = "line",
+    base_font_size      = BASE_FONT_SIZE,
+    figsize_cm          = SEGMENT_FIGSIZE_CM_NO_LEGEND,
+    #day_night_indicator = ("aw", "sl"),
     plot_layout={"legend_font_size":LEGEND_FONT_SIZE, 
-                    "legend":True})
+                 "legend":False})
 # %% DEEPER ANALYSIS: ASSESS LEARNING ONSETS AND EXPERIENCE
 """
 Next you may be interested in assessing the learning onsets and experience of 
@@ -729,24 +784,27 @@ these plots and the underlying data.
 for current_phase in PLR_PHASES:
     # current_phase = PLR_PHASES[0]
     for current_metric in PLR_METRICS:
-        # current_metric = PLR_METRICS[0]
+        # current_metric = PLR_METRICS[2]
         my_pl_exp.plot_plr_experience_learning_curve(
-            phase_number=current_phase,
-            metric=current_metric,
-            dayphase="day",
-            phase_max_hours=PHASE_MAX_HOURS,
-            spread_metric="sem",
-            base_font_size=BASE_FONT_SIZE,
-            figsize_cm=TIMELINE_FIGSIZE_CM)
+            phase_number    = current_phase,
+            metric          = current_metric,
+            dayphase        = "day",
+            phase_max_hours = PHASE_MAX_HOURS,
+            spread_metric   = "sem",
+            base_font_size  = BASE_FONT_SIZE,
+            figsize_cm      = TIMELINE_FIGSIZE_CM,
+            plot_layout     = {"legend_font_size":LEGEND_FONT_SIZE, 
+                               "legend":False})
         my_pl_exp.plot_plr_experience_learning_onset(
-            phase_number=current_phase,
-            metric=current_metric,
-            dayphase="day",
-            phase_max_hours=PHASE_MAX_HOURS,
-            base_font_size=BASE_FONT_SIZE,
-            figsize_cm=VIOLIN_FIGSIZE_CM,
-            show_N=True,
-            plot_layout={"ylim": (0.0, None)})
+            phase_number    = current_phase,
+            metric          = current_metric,
+            dayphase        = "day",
+            phase_max_hours = PHASE_MAX_HOURS,
+            base_font_size  = BASE_FONT_SIZE,
+            figsize_cm      = (3.9,5.0),
+            show_N          = True,
+            plot_layout     ={"ylim": (0.0, None)})
+        
         for current_threshold in RATE_THRESHOLD_PCTS:
             # current_threshold=RATE_THRESHOLD_PCTS[0]
             my_pl_exp.plot_plr_threshold_onset(
@@ -760,33 +818,33 @@ for current_phase in PLR_PHASES:
                 figsize_cm=VIOLIN_FIGSIZE_CM)
     my_pl_exp.plot_plr_derived_ratio(
         phase_number=current_phase,
-        numerator_col="rewarded_correct_corner_visit",
-        denominator_col="correct_np_visit",
-        metric_name="completion_efficiency",
-        title="completion efficiency",
-        ylabel="Rewarded correct / correct NP [%]",
-        phase_day=(1, 2, 3),
-        dayphase="day",
-        phase_max_hours=PHASE_MAX_HOURS,
-        base_font_size=BASE_FONT_SIZE,
-        figsize_cm=VIOLIN_FIGSIZE_CM)
+        numerator_col   = "rewarded_correct_corner_visit",
+        denominator_col = "correct_np_visit",
+        metric_name     = "completion_efficiency",
+        title           = "completion efficiency",
+        ylabel          = "Rewarded correct / correct NP [%]",
+        phase_day       = (1, 2, 3),
+        dayphase        = "day",
+        phase_max_hours = PHASE_MAX_HOURS,
+        base_font_size  = BASE_FONT_SIZE,
+        figsize_cm      = VIOLIN_FIGSIZE_CM)
 
 my_pl_exp.plot_plr_derived_ratio(
-    phase_number=4,
-    numerator_col="correct_corner_visit",
-    denominator_col="new_or_previous_correct_corner_visit",
-    metric_name="reversal_preference_index", 
-    title="reversal preference index",
-    ylabel="New / (new + previous)",
-    phase_day=(1, 2, 3),
-    dayphase="day",
-    phase_max_hours=PHASE_MAX_HOURS,
-    value_scale=1.0,
-    format_as_percent=False,
-    reference_line=0.5,
-    base_font_size=BASE_FONT_SIZE,
-    figsize_cm=VIOLIN_FIGSIZE_CM,
-    plot_layout={"ylim": (0.0, 1.5)})
+    phase_number        = 4,
+    numerator_col       = "correct_corner_visit",
+    denominator_col     = "new_or_previous_correct_corner_visit",
+    metric_name         = "reversal_preference_index", 
+    title               = "reversal preference index",
+    ylabel              = "New / (new + previous)",
+    phase_day           = (1, 2, 3),
+    dayphase            = "day",
+    phase_max_hours     = PHASE_MAX_HOURS,
+    value_scale         = 1.0,
+    format_as_percent   = False,
+    reference_line      = 0.5,
+    base_font_size      = BASE_FONT_SIZE,
+    figsize_cm          = VIOLIN_FIGSIZE_CM,
+    plot_layout         ={"ylim": (0.0, 1.5)})
 
 """
 The cumulative role curves show how PL and PR corner preferences accumulate
