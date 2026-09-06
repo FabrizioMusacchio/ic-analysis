@@ -1424,7 +1424,7 @@ def compute_binomial_glm_group_statistics(
 
     return pd.DataFrame(omnibus_rows), pd.DataFrame(pairwise_rows)
 
-def compute_clustered_binomial_gee_group_statistics(
+def compute_binomial_gee_group_statistics(
     data: pd.DataFrame,
     *,
     phase_number: int,
@@ -1559,6 +1559,11 @@ def compute_clustered_binomial_gee_group_statistics(
             pairwise_rows.append(row)
 
     return pd.DataFrame(omnibus_rows), pd.DataFrame(pairwise_rows)
+
+
+# Backward-compatible alias for the original public function name.
+compute_clustered_binomial_gee_group_statistics = compute_binomial_gee_group_statistics
+
 
 def _fdr_bh_adjust(p_values: list[float]) -> list[float]:
     """Apply Benjamini-Hochberg FDR correction to a sequence of p-values."""

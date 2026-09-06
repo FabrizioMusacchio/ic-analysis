@@ -52,7 +52,7 @@ from ic_analysis.metrics import (
     compute_awake_day_error_rate_tables,
     compute_awake_day_ratio_tables,
     compute_binomial_glm_group_statistics,
-    compute_clustered_binomial_gee_group_statistics,
+    compute_binomial_gee_group_statistics,
     compute_experiment_drinking_visit_bins,
     compute_experiment_lick_count_bins,
     compute_experiment_nosepoke_count_bins,
@@ -595,14 +595,14 @@ def _build_pl_rewarded_gee_stats(
         & hourly["bin_start_hours"].lt(24.0)
     ].copy()
 
-    day1_omnibus, day1_pairwise = compute_clustered_binomial_gee_group_statistics(
+    day1_omnibus, day1_pairwise = compute_binomial_gee_group_statistics(
         day1_awake,
         phase_number=3,
         metric_name=f"rewarded_correct_corner_day1awake_gee_{int(bin_hours)}h",
         success_col="correct_visits",
         total_col="all_visits",
     )
-    first24_omnibus, first24_pairwise = compute_clustered_binomial_gee_group_statistics(
+    first24_omnibus, first24_pairwise = compute_binomial_gee_group_statistics(
         first24h,
         phase_number=3,
         metric_name=f"rewarded_correct_corner_first24h_gee_{int(bin_hours)}h",

@@ -10,7 +10,7 @@ from ic_analysis.metrics import (
     compute_awake_day_rate_tables,
     compute_awake_day_ratio_tables,
     compute_binomial_glm_group_statistics,
-    compute_clustered_binomial_gee_group_statistics,
+    compute_binomial_gee_group_statistics,
     compute_bottle_preference_bins,
     compute_experiment_drinking_visit_bins,
     compute_experiment_lick_count_bins,
@@ -290,7 +290,7 @@ def test_onset_responder_and_statistical_metrics(aligned_visits) -> None:
         phase_number=3,
         bin_hours=6,
         success_col="rewarded_correct_corner_visit")
-    gee_omnibus, gee_pairwise = compute_clustered_binomial_gee_group_statistics(
+    gee_omnibus, gee_pairwise = compute_binomial_gee_group_statistics(
         binned_mouse,
         phase_number=3,
         metric_name="rewarded_correct_corner_6h",
@@ -407,7 +407,7 @@ def test_empty_inputs_return_empty_tables(aligned_visits) -> None:
         metric_name="empty",
         success_col="correct_visits",
         total_col="all_visits")[0].empty
-    assert compute_clustered_binomial_gee_group_statistics(
+    assert compute_binomial_gee_group_statistics(
         pd.DataFrame(),
         phase_number=3,
         metric_name="empty",

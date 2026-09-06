@@ -125,7 +125,7 @@ Metric tables
 .. autofunction:: compute_threshold_responder_table
 .. autofunction:: compute_responder_group_statistics
 .. autofunction:: compute_binomial_glm_group_statistics
-.. autofunction:: compute_clustered_binomial_gee_group_statistics
+.. autofunction:: compute_binomial_gee_group_statistics
 .. autofunction:: compute_group_day_violin_statistics
 .. autofunction:: compute_role_cumulative_curves
 .. autofunction:: compute_time_window_learning_curves
