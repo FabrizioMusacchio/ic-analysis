@@ -61,6 +61,9 @@ IntelliCage Analysis Toolkit documentation
    :target: https://doi.org/10.5281/zenodo.22181525
    :alt: Zenodo Archive
 
+.. image:: https://img.shields.io/badge/bioRxiv-10.64898%2F2026.09.06.749703-red
+   :target: https://doi.org/10.64898/2026.09.06.749703
+   :alt: bioRxiv preprint
 
 The IntelliCage Analysis Toolkit is a Python package for analyzing IntelliCage
 experiments. It reads exported ``Visits.txt`` and ``Nosepokes.txt`` tables,
