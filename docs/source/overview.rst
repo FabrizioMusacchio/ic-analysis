@@ -229,16 +229,24 @@ of merchantability or fitness for a particular purpose.
 Citation
 --------
 
-If you use the IntelliCage Analysis Toolkit in scientific work, please
-cite the corresponding software archive:
+If you use the IntelliCage Analysis Toolkit in scientific work, 
+please cite it as follows:
+
+  Musacchio, F., and Fuhrmann, M. (2026). *Toward standardized behavioral 
+  analysis in IntelliCage experiments.* 
+  bioRxiv. https://doi.org/10.64898/2026.09.06.749703
+
+In case you additionally want to cite a specific archived software version 
+of the toolkit, please use the following reference:
 
   Musacchio, F. (2026). *IntelliCage Analysis Toolkit: A Python 
   toolkit for standardizing the analysis of IntelliCage experiments.*
   Zenodo. https://doi.org/10.5281/zenodo.22181525
 
-If you use the provided example dataset, please cite the corresponding dataset archive:
+If you use the provided example dataset, please cite the corresponding dataset
+archive:
 
-  Musacchio, F. (2026). *IntelliCage Analysis Toolkit Example Dataset* 
+  Musacchio, F., and Fuhrmann, M. (2026). *IntelliCage Analysis Toolkit Example Dataset* 
   [Dataset]. Zenodo. https://doi.org/10.5281/zenodo.22518261
   
 

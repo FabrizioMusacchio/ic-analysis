@@ -19,11 +19,14 @@ preferred-citation:
     - family-names: Musacchio
       given-names: Fabrizio
       orcid: https://orcid.org/0000-0002-9043-3349
-  title: "IntelliCage Analysis Toolkit: A Python toolkit for standardizing the analysis of IntelliCage experiments"
-  journal: Zenodo
+    - family-names: Fuhrmann
+      given-names: Martin
+  title: "Toward standardized behavioral analysis in IntelliCage experiments"
   year: 2026
-  doi: 10.5281/zenodo.22181525
-  url: https://doi.org/10.5281/zenodo.22181525
+  doi: 10.64898/2026.09.06.749703
+  url: https://www.biorxiv.org/content/early/2026/07/10/2026.09.06.749703
+  journal: bioRxiv
+  publisher: Cold Spring Harbor Laboratory
 
 keywords:
   - IntelliCage
